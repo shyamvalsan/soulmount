@@ -100,6 +100,11 @@ Code to these **real** paths (from live `/openapi.json`):
   reads it could drop the one-shot letter. Accepted — the letter is a gift, not a
   safety property; me-time and chat paths mark it only after the model actually
   received it, so double-delivery is prevented.
+- **Identity has a template floor:** SOUL (prime directive), HOUSE (hard rules), and the
+  honest-self-facts block are always emitted whole — they can't be trimmed. The growable,
+  robot-authored sections (SELF.md, succession letter, memory/recent-days) ARE clipped to
+  the token budget. So `IDENTITY_MAX_TOKENS` / `REALTIME_IDENTITY_MAX_TOKENS` must be set
+  at or above that floor (~1.5k tokens); the spec's "~IDENTITY_MAX_TOKENS" allows the slack.
 - **Cost fail-closed:** if a non-OpenRouter provider reports no cost and the model
   isn't priced, a deliberately HIGH fallback rate is charged (never $0) so the hard
   cap engages rather than failing open.

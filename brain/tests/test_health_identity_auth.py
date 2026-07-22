@@ -67,6 +67,18 @@ def test_house_endpoint_returns_hard_values(client):
     assert body["camera_capture"] == "on-request-only"
 
 
+def test_identity_clips_huge_self(make_client, data_dir):
+    # A robot-authored SELF.md that grows unbounded is clipped, so it can't dominate the
+    # identity. (The essential template core — prime directive + hard rules — is a floor
+    # the spec's "~IDENTITY_MAX_TOKENS" acknowledges; only growable sections are clipped.)
+    (data_dir / "soul" / "SELF.md").write_text("SELFWORD " * 5000)  # ~45k chars raw
+    with make_client(IDENTITY_MAX_TOKENS="2000") as c:
+        text = c.get("/v1/identity?inspect=true", headers=AUTH).json()["instructions"]
+    assert "clipped to fit" in text
+    assert text.count("SELFWORD") < 1000            # clipped, not all ~5000
+    assert len(text) < 12000                        # ~8.5k, not the raw ~45k+
+
+
 def test_auth_missing_token_401(client):
     assert client.get("/v1/identity").status_code == 401
     assert client.post("/v1/remember", json={"note": "x"}).status_code == 401

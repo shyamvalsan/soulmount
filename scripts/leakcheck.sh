@@ -12,6 +12,8 @@ set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
+HISTORY=0; [ "${1:-}" = "--history" ] && HISTORY=1  # also scan all git history (pre-push)
+
 if REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then :; else
   REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
@@ -113,7 +115,13 @@ if [ "$HAVE_ENV" = 1 ]; then
     case "$k" in
       *KEY | *TOKEN | *SECRET | *PASSWORD)
         [ "${#v}" -ge 16 ] && _scan_env_value "$v" "SECRET" ;;
-      SOULMOUNT_DATA_DIR | REACHY_IP | BRAIN_HOST | TELEGRAM_FAMILY_CHAT_ID | BUDGET_TZ)
+      SOULMOUNT_DATA_DIR)
+        [ "${#v}" -ge 7 ] && _scan_env_value "$v" "IDENTIFIER"
+        # ...and the bare home-dir username component (/home/<user>/…), skipping generic ones.
+        _u="$(printf '%s' "$v" | sed -nE 's#^/(home|Users)/([^/]+)/.*#\2#p')"
+        case "$_u" in root | admin | user | guest | ubuntu | pollen | "") : ;;
+          *) [ "${#_u}" -ge 4 ] && _scan_env_value "$_u" "IDENTIFIER" ;; esac ;;
+      REACHY_IP | BRAIN_HOST | TELEGRAM_FAMILY_CHAT_ID | BUDGET_TZ)
         [ "${#v}" -ge 7 ] && _scan_env_value "$v" "IDENTIFIER" ;;
       TELEGRAM_ALLOWED_USER_IDS)
         IFS=',' read -ra _ids <<< "$v"
@@ -122,8 +130,33 @@ if [ "$HAVE_ENV" = 1 ]; then
   done < <(grep -vE '^\s*(#|$)' .env)
 fi
 
+# ── 4) Full git history (--history; run once before the first public push) ──────
+# A secret/term committed then removed still ships in history when open-sourced.
+if [ "$HISTORY" = 1 ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "scanning full git history (all commits)…"
+  revs="$(git rev-list --all 2>/dev/null)"
+  if [ -n "$revs" ]; then
+    for pat in "${SECRET_PATTERNS[@]}"; do
+      if git grep -InHE "$pat" $revs -- 2>/dev/null | head -1 | grep -q .; then
+        echo -e "${RED}✗ LEAK: secret pattern found in git HISTORY (pattern redacted below).${NC}"
+        git grep -lE "$pat" $revs -- 2>/dev/null | sed 's/^/    /' | head -20
+        fail=1
+      fi
+    done
+    if [ -n "${TMP_TERMS:-}" ] && [ -s "${TMP_TERMS:-/dev/null}" ]; then
+      while IFS= read -r term; do
+        [ -n "$term" ] || continue
+        if git grep -Ini -e "$term" $revs -- 2>/dev/null | head -1 | grep -q .; then
+          echo -e "${RED}✗ LEAK: household term '${term}' found in git HISTORY.${NC}"
+          fail=1
+        fi
+      done < "$TMP_TERMS"
+    fi
+  fi
+fi
+
 if [ "$fail" -ne 0 ]; then
-  echo -e "${RED}━━ leakcheck FAILED — do not commit. Move content into \$SOULMOUNT_DATA_DIR. ━━${NC}"
+  echo -e "${RED}━━ leakcheck FAILED — do not commit/push. Move content into \$SOULMOUNT_DATA_DIR. ━━${NC}"
   exit 1
 fi
 echo -e "${GREEN}✓ leakcheck passed${NC}"

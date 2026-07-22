@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 
 from .brain import BrainConnection
@@ -27,6 +28,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 # httpx/httpcore INFO logs the full request URL (incl. any Bearer/token) — keep it quiet.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+class _RedactingFilter(logging.Filter):
+    """Belt-and-suspenders: the body holds the BRAIN_API_KEY bearer — never log it."""
+
+    _RE = re.compile(r"(Bearer\s+[A-Za-z0-9._-]{16,}|[0-9a-fA-F]{48,}|sk-[A-Za-z0-9-]{20,})")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._RE.sub("***REDACTED***", record.msg)
+        return True
+
+
+for _h in logging.getLogger().handlers:
+    _h.addFilter(_RedactingFilter())
 log = logging.getLogger("soulmount.body")
 
 try:  # Only importable on the robot / SDK venv; tests target the other modules.

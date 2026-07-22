@@ -23,28 +23,32 @@ AUSER="${BRAIN_SSH_USER:-$USER}"   # attic WSL account (distinct from the robot 
 SSHO="-o BatchMode=yes -o ConnectTimeout=4"  # short so a degraded round can't overrun 180s much
 
 # Each gate prints PASS / FAIL / DEGRADED. Robot gates (1-4) always FAIL on failure.
-# Attic gates (6,7) FAIL when the attic IS reachable (g5 PASS) but the brain/units are
-# down — a broken-but-reachable brain must NOT pass — and only DEGRADE when the attic
-# itself is offline (g5 DEGRADED), which is the tolerated degraded-mode drill.
-ATTIC_UP=0
-_tcp(){ (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null && { exec 3>&-; return 0; } || return 1; }  # nc-free
+# Attic gates (6,7) FAIL when the attic IS reachable but the brain/units are down — a
+# broken-but-reachable brain must NOT pass — and only DEGRADE when the attic itself is
+# offline (the tolerated degraded-mode drill). NB: gates run inside a command-sub
+# subshell, so g6/g7 re-test attic reachability with _tcp themselves rather than trust a
+# variable a subshell can't export.
+_tcp(){ timeout 4 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }  # bounded, nc-free
 g1(){ getent hosts "$HOST" >/dev/null 2>&1 || python3 -c "import socket;socket.gethostbyname('$HOST')" >/dev/null 2>&1 && echo PASS || echo FAIL; }
 g2(){ [ "$(curl -s -m5 -o /dev/null -w '%{http_code}' "$RBASE/docs")" = 200 ] && echo PASS || echo FAIL; }
 g3(){ [ "$(ssh $SSHO "$RUSER@$HOST" 'systemctl is-active reachy-mini-daemon' 2>/dev/null)" = active ] && echo PASS || echo FAIL; }
 g4(){ curl -s -m5 "$RBASE/api/apps/current-app-status" 2>/dev/null \
      | jq -e '(.app_name // .name // .app // "")|test("soulmount";"i")' >/dev/null 2>&1 && echo PASS || echo FAIL; }
-g5(){ if _tcp "$ATTIC" "$SSHP"; then ATTIC_UP=1; echo PASS; else ATTIC_UP=0; echo DEGRADED; fi; }
+g5(){ _tcp "$ATTIC" "$SSHP" && echo PASS || echo DEGRADED; }
 g6(){ # all soulmount units active inside WSL (brain + channels + metime timer)
   local out; out="$(ssh $SSHO -p "$SSHP" "$AUSER@$ATTIC" \
      'systemctl is-active soulmount-brain soulmount-channels soulmount-metime.timer' 2>/dev/null)"
   if [ "$(printf '%s' "$out" | grep -c '^active$')" = 3 ]; then echo PASS
-  elif [ "$ATTIC_UP" = 1 ]; then echo FAIL; else echo DEGRADED; fi; }
+  elif _tcp "$ATTIC" "$SSHP"; then echo FAIL; else echo DEGRADED; fi; }
 g7(){ # robot -> brain LAN path (proves mirrored networking / portproxy) — key gate
   if ssh $SSHO "$RUSER@$HOST" "curl -s -m5 -o /dev/null -w '%{http_code}' http://$ATTIC:$BPORT/health" 2>/dev/null | grep -q 200
   then echo PASS
-  elif [ "$ATTIC_UP" = 1 ]; then echo FAIL; else echo DEGRADED; fi; }
-g8(){ # greeting: the app runs UNDER reachy-mini-daemon, so its log is in that journal
-  ssh $SSHO "$RUSER@$HOST" "journalctl -u reachy-mini-daemon -n 400 --no-pager 2>/dev/null | grep -qi 'greeting played'" \
+  elif _tcp "$ATTIC" "$SSHP"; then echo FAIL; else echo DEGRADED; fi; }
+g8(){ # greeting: the app runs UNDER reachy-mini-daemon (assumed captured in its journal;
+      # verify at wire-up). Accept the greeting line OR the quiet-hours suppression line —
+      # a correct quiet-hours boot legitimately plays no greeting (SPEC §Phase 4 tests this).
+  ssh $SSHO "$RUSER@$HOST" \
+     "journalctl -u reachy-mini-daemon -n 600 --no-pager 2>/dev/null | grep -Eqi 'greeting played|quiet hours .*no greeting'" \
      && echo PASS || echo FAIL; }
 
 NAMES=("robot host resolves ($HOST)" "daemon /docs 200" "daemon service active"

@@ -54,3 +54,49 @@ Append-only. ~Every 30 min or per acceptance item: done / next / blockers / spen
   production grade. Then final heartbeat.
 - **Blockers:** none for the overnight scope. MORNING.md holds the supervised queue.
 - **Spend so far:** ~$0.05 (no new model spend this block; scripts/docs only).
+
+### 2026-07-23 01:10 EEST — review round 1 applied
+- **Done:** Ran 3 clean-context reviewers (brain / body+scripts / leak+guardrails).
+  Validated findings (2 false positives discarded with reasoning). Fixed the lot,
+  most important: streaming cost recorded on disconnect (hard-cap safety), stream
+  errors → 502, succession letter consumed only on delivery, goodnight-once, leakcheck
+  now case-insensitive + git-tracked scan + fail-closed + BRAIN_API_KEY pattern,
+  setup-attic boot task runs as the distro user (not SYSTEM), verify_boot actually
+  polls, deploy-code no longer wipes robot .env. **48 brain + 12 body + 4 live pass.**
+- **Next:** re-run the SAME reviewers (round 2) until clean.
+- **Spend so far:** ~$0.06 (one more live test run, 4 grok calls).
+
+### 2026-07-23 01:40 EEST — review round 2 applied
+- **Done:** Re-ran all 3 reviewers (same prompts). Fixed a batch incl. a bug I'd
+  introduced (identity trim evicted the newest day), cost-fails-closed for unpriced
+  providers, me-time consuming the succession letter (no double-delivery), non-blocking
+  changelog reconcile, atomic tracked writes, setup-attic SYSTEM→user for BOTH tasks +
+  BOM-less .wslconfig, brain bind 0.0.0.0, leakcheck fail-closed on zero-term file,
+  body mid-session brain-death recovery. **50 brain + 12 body + 4 live pass.** Design
+  decisions (say_privately scope, anti-triangulation, egress backstop, key rotation)
+  → MORNING.md for the owner. Accepted single-robot limits → FACTS §7.
+- **Next:** review round 3 to confirm convergence, then declare overnight scope done.
+- **Spend so far:** ~$0.07 (another live run).
+
+### 2026-07-23 02:30 EEST — review round 3 applied; converging
+- **Done:** 3rd re-review. Fixed: cap-overshoot pre-flight max_tokens clamp, ledger
+  mtime-cache, goodnight-marker per-reason (bug I introduced in r2), succession letter
+  needs ?deliver=true (no inspection burn), baseline seeding on first tracked write,
+  root-logger redaction + httpx quiet, Telegram chat-scope gate, leakcheck scans real
+  .env secret VALUES (verified against a planted key), setup-attic mirrored capability
+  check, verify-boot degraded-exit no longer a make error. **52 brain + 12 body + 4
+  live pass.** All 3 reviewers now say "leak-clean & publishable"; residual items are
+  owner-decisions (MORNING §F) + accepted single-robot limits (FACTS §7).
+- **Next:** round 4 convergence check, then declare overnight scope done.
+- **Spend so far:** ~$0.08.
+
+### 2026-07-23 03:30 EEST — review round 4 applied
+- **Done:** 4th re-review found 2 real NEW bugs in never-run paths — verify_boot masked
+  a broken-but-reachable brain as merely "degraded" (gate would green-light a down
+  brain); body startup treated health-OK as ready (bad BRAIN_API_KEY → silent default
+  house rules + empty persona). Both fixed. Plus: egress allowlist now enforced in code
+  (§9.6, httpx event-hook), atomic DataDir.write, disconnect estimate counts reasoning/
+  tool bytes, ledger runner tagged channels-vs-conversation, leakcheck scans .env
+  identifier values, several cheap hardenings. **56 brain + 12 body + 4 live pass.**
+- **Next:** round 5 — because round 4 was not clean, keep iterating.
+- **Spend so far:** ~$0.09.

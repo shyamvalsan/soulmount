@@ -47,9 +47,13 @@ def main() -> int:
         sounds = c.get(f"{base}/api/media/sounds").json()
         name = (sounds[0] if isinstance(sounds, list) and sounds else None)
         if name:
+            prior = c.get(f"{base}/api/volume/current").json().get("volume")
             c.post(f"{base}/api/volume/set", json={"volume": 30})
             r = c.post(f"{base}/api/media/play_sound", json={"filename": name})
             print(f"   played {name} ->", r.status_code)
+            if isinstance(prior, int):  # restore the device to its prior volume
+                c.post(f"{base}/api/volume/set", json={"volume": prior})
+                print(f"   restored volume to {prior}")
         else:
             print("   no sounds available to play")
 

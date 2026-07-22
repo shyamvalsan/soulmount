@@ -47,7 +47,10 @@ class BodyStateProbe:
 
     def _client_or_new(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0))
+            from .egress import hooks_for
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(2.0, connect=1.0), event_hooks=hooks_for(self.settings)
+            )
         return self._client
 
     async def aclose(self) -> None:

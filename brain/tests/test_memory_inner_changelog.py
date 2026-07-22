@@ -77,14 +77,14 @@ def test_succession_letter_delivered_once_via_identity(client, data_dir):
     letters = data_dir / "inner" / "letters"
     letters.mkdir(parents=True, exist_ok=True)
     (letters / "2026-07-22-to-successor.md").write_text("# letter\n\nLETTER_SENTINEL_TIDES\n")
-    # A plain inspection GET does NOT consume the one-shot letter...
-    inspect = client.get("/v1/identity", headers=AUTH).json()["instructions"]
-    assert "LETTER_SENTINEL_TIDES" in inspect
-    # ...only a real delivery (?deliver=true, the body app's session-start fetch) does.
-    first = client.get("/v1/identity?deliver=true", headers=AUTH).json()["instructions"]
+    # ?inspect=true looks WITHOUT consuming the one-shot letter (for monitoring)...
+    peek = client.get("/v1/identity?inspect=true", headers=AUTH).json()["instructions"]
+    assert "LETTER_SENTINEL_TIDES" in peek
+    # ...a plain GET (the body app's session-start fetch) IS delivery and consumes it.
+    first = client.get("/v1/identity", headers=AUTH).json()["instructions"]
     assert "LETTER_SENTINEL_TIDES" in first
     assert "letter from the instance before you" in first
-    second = client.get("/v1/identity?deliver=true", headers=AUTH).json()["instructions"]
+    second = client.get("/v1/identity", headers=AUTH).json()["instructions"]
     assert "LETTER_SENTINEL_TIDES" not in second  # delivered exactly once
 
 

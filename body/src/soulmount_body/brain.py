@@ -45,10 +45,10 @@ class BrainConnection:
 
     async def identity(self, slim: bool = False) -> str | None:
         try:
-            # deliver=true: this session-start fetch IS the delivery, so a pending
-            # succession letter is consumed (a plain inspection GET would not).
+            # A plain GET is the session-start delivery — the brain consumes a pending
+            # succession letter by default (monitoring would pass ?inspect=true).
             r = await self._c().get(
-                f"{self.base}/v1/identity", params={"slim": slim, "deliver": True}, headers=self.auth
+                f"{self.base}/v1/identity", params={"slim": slim}, headers=self.auth
             )
             if r.status_code != 200:
                 return None

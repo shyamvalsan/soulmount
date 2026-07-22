@@ -94,13 +94,14 @@ async def health(request: Request):
 
 
 @app.get("/v1/identity", dependencies=[Depends(require_auth)])
-async def identity(request: Request, slim: bool = False, deliver: bool = False):
+async def identity(request: Request, slim: bool = False, inspect: bool = False):
     c = ctx(request)
     result = await _compile_identity(c, slim=slim)
-    # Consume a pending succession letter ONLY when the caller declares real delivery
-    # (?deliver=true — the body app's session-start fetch). A plain inspection GET or a
-    # monitor probe must not burn the one-shot letter (§7.5, delivered once).
-    if deliver and result.included_letter:
+    # Fetching the identity IS delivery, so a pending succession letter is consumed by
+    # default — any spec-conformant client that GETs and injects the text gets it once
+    # (§7.5). Monitoring that wants to look without consuming passes ?inspect=true (and
+    # /health, unauthed, is the normal probe anyway).
+    if not inspect and result.included_letter:
         c.identity.mark_letter_delivered(result.included_letter)
     return {"instructions": result.text, "soul_version": result.soul_version}
 

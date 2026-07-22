@@ -75,12 +75,16 @@ class BrainClient:
         self.base = f"http://{settings.brain_host}:{settings.brain_port}"
         self.headers = {"Authorization": f"Bearer {settings.brain_api_key}"}
         self.model = settings.brain_model
+        self._hosts = {h for h in (settings.brain_host, "127.0.0.1", "localhost", "0.0.0.0") if h}
         self._client = client
         self._owns = client is None
 
     def _c(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0))
+            from .egress import event_hooks
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(120.0, connect=10.0), event_hooks=event_hooks(self._hosts)
+            )
         return self._client
 
     async def aclose(self) -> None:

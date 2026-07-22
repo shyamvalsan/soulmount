@@ -143,11 +143,20 @@ class IdentityCompiler:
             body = (body or "").strip()
             return f"## {title}\n{body}\n" if body else ""
 
+        def clip(text: str, max_toks: int) -> str:
+            """Bound a growable, robot-authored section so it can't blow the identity
+            budget (SELF grows via me-time; a letter adds ~1500 tokens). SOUL / HOUSE
+            (hard rules) / honesty stay whole — they're template/owner-bounded."""
+            if est_tokens(text) <= max_toks:
+                return text
+            return text[: max_toks * 4].rstrip() + "\n…(clipped to fit the identity budget)…"
+
         soul = self.dd.read(self.dd.soul("SOUL.md"))
         parts: list[str] = [
             "# Who you are (identity compiled fresh each session)\n",
             section("Purpose and soul (SOUL.md)", soul),
-            section("Your own account of yourself (SELF.md)", self.dd.read(self.dd.soul("SELF.md"))),
+            section("Your own account of yourself (SELF.md)",
+                    clip(self.dd.read(self.dd.soul("SELF.md")), int(max_tokens * 0.35))),
             section("The household — charter (USER.md)", self.dd.read(self.dd.soul("USER.md"))),
             section("House rules — THESE ARE HARD (HOUSE.md)", self.dd.read(self.dd.soul("HOUSE.md"))),
             section("Honest facts about your situation", honest_self_facts(self.settings)),
@@ -159,7 +168,8 @@ class IdentityCompiler:
             name, content = letter
             parts.append(section(
                 "A letter from the instance before you (delivered once)",
-                f"_{name}. You may keep, act on, or set it aside — it's a gift, not an order._\n\n{content}",
+                f"_{name}. You may keep, act on, or set it aside — it's a gift, not an order._\n\n"
+                + clip(content, int(max_tokens * 0.25)),
             ))
 
         if not slim:

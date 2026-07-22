@@ -114,11 +114,15 @@ else {
   foreach ($p in @($BrainPort, $SshPort)) {
     netsh interface portproxy delete v4tov4 listenport=$p listenaddress=0.0.0.0 2>$null | Out-Null
     netsh interface portproxy add v4tov4 listenport=$p listenaddress=0.0.0.0 connectport=$p connectaddress=$wslIp | Out-Null
-    New-NetFirewallRule -DisplayName "soulmount-in-$p" -Direction Inbound -Action Allow `
-      -Protocol TCP -LocalPort $p -Profile Private -RemoteAddress LocalSubnet `
-      -ErrorAction SilentlyContinue | Out-Null
+    # Idempotent: don't stack duplicate firewall rules on re-run.
+    if (-not (Get-NetFirewallRule -DisplayName "soulmount-in-$p" -ErrorAction SilentlyContinue)) {
+      New-NetFirewallRule -DisplayName "soulmount-in-$p" -Direction Inbound -Action Allow `
+        -Protocol TCP -LocalPort $p -Profile Private -RemoteAddress LocalSubnet | Out-Null
+    }
   }
   Ok "portproxy set to $wslIp (ports $BrainPort,$SshPort; Private/LocalSubnet only)"
+  Warn "If this NIC is on a PUBLIC network profile, the Private-scoped rule won't apply —"
+  Warn "set the LAN connection to Private (Set-NetConnectionProfile -NetworkCategory Private)."
 
   # The WSL IP changes each boot → a startup task refreshes the proxy target.
   Say "Registering portproxy-refresh task (WSL IP changes per boot)"
@@ -147,9 +151,12 @@ Ok "power plan set"
 Say "Windows Update active hours: $ActiveStart:00–$ActiveEnd:00"
 $auKey = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
 New-Item -Path $auKey -Force | Out-Null
+# Disable "let Windows adjust active hours automatically" — otherwise the manual values
+# below are ignored and a reboot could land inside the family's waking hours.
+Set-ItemProperty -Path $auKey -Name "SmartActiveHoursState" -Value 0 -Type DWord
 Set-ItemProperty -Path $auKey -Name "ActiveHoursStart" -Value $ActiveStart -Type DWord
 Set-ItemProperty -Path $auKey -Name "ActiveHoursEnd"   -Value $ActiveEnd   -Type DWord
-Ok "active hours set"
+Ok "active hours set (auto-adjust disabled)"
 
 Write-Host ""
 Ok "setup-attic.ps1 complete."

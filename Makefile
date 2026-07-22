@@ -35,6 +35,9 @@ hooks: ## Install the leakcheck pre-commit hook (git core.hooksPath)
 leakcheck: ## Hard gate: no personal data / secrets in the repo tree
 	@bash scripts/leakcheck.sh
 
+leakcheck-history: ## Also scan ALL git history — run once before the first public push
+	@bash scripts/leakcheck.sh --history
+
 # ── Environment setup ────────────────────────────────────────────────────────
 .PHONY: setup brain-venv sdk-venv
 setup: brain-venv hooks ## One-time laptop setup (brain venv + hooks)
