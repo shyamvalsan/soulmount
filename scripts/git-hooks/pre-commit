@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# soulmount pre-commit hook — leakcheck is a hard gate (SPEC §6.1, guardrail 5).
+# Installed by pointing core.hooksPath at scripts/git-hooks (see `make hooks`).
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec "$ROOT/scripts/leakcheck.sh"

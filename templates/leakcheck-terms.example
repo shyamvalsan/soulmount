@@ -1,0 +1,21 @@
+# .leakcheck-terms — example / template (this .example file IS committed; the real
+# .leakcheck-terms lives ONLY in $SOULMOUNT_DATA_DIR and is NEVER committed).
+#
+# `make init-data` copies this to $SOULMOUNT_DATA_DIR/.leakcheck-terms and walks
+# you through filling it. `make leakcheck` fails the build (and the pre-commit
+# hook) if ANY line here appears anywhere in the repo tree.
+#
+# Rules:
+#   - One term per line. Blank lines and lines starting with '#' are ignored.
+#   - Matching is case-insensitive, substring.
+#   - Add every household-identifying string: given names, nicknames, the city,
+#     the street, the bot handle, Telegram chat IDs and user IDs, the robot's
+#     chosen name, the YouTube channel/handle, any email or phone.
+#   - When in doubt, add it. A leak is a stop-everything bug (guardrail 5).
+#
+# Example entries (delete these — they are illustrations, not real):
+# alice
+# our-street-name
+# our-city
+# @our_bot_handle
+# 123456789

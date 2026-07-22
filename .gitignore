@@ -1,0 +1,34 @@
+# Secrets and personal data — NEVER committed (guardrail 5, §6.1)
+.env
+.env.*
+!.env.example
+
+# The data directory must never live in the tree, but guard anyway in case a
+# developer points $SOULMOUNT_DATA_DIR at a local ./soulmount-data by mistake.
+soulmount-data/
+/data/
+*.leakcheck-terms
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Node / body app build artifacts (if any land during a dev build)
+node_modules/
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# Local scratch
+/scratch/
+*.log
