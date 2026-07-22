@@ -83,6 +83,10 @@ brain-run: ## Run the brain (no reload)
 brain-test: ## pytest against a temp data dir built from templates/
 	@cd brain && $(UV) run pytest -q
 
+body-test: ## pytest the body app logic (light; no robot SDK needed)
+	@cd body && PYTHONPATH=$$PWD/src $(UV) run --no-project \
+	  --with pytest --with pytest-asyncio --with respx --with httpx pytest -q
+
 # ── Channels (Phase 5) ───────────────────────────────────────────────────────
 .PHONY: channels-run channels-dry
 channels-dry: ## Telegram worker, DRY-RUN (no sends) — safe overnight
