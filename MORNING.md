@@ -1,5 +1,21 @@
 # MORNING.md — supervised checklist (queued from the overnight run)
 
+## Build state at handoff (2026-07-23 ~00:40)
+- **Green overnight:** brain (Phase 1) with 32+ tests incl. live grok-4.5; me-time +
+  succession (Phase 6, run live — journal/doodle/SELF written); channels (Phase 5,
+  --dry-run + tests); body app (Phase 3, logic + lifecycle, voice seam pending);
+  all ops scripts + `setup-attic.ps1`; README. `make brain-test` and `make body-test`
+  pass; `make leakcheck` green at HEAD. See `PROGRESS.md` for the story.
+- **Dev data dir**: `~/soulmount-data` holds *placeholder* templates + overnight test
+  artifacts (a journal entry, a doodle, a SELF.md draft, a dry-run letter, ledger).
+  It is throwaway — `make init-data` fills the real content; clear the test artifacts
+  first if you want a clean slate.
+- **A dev `BRAIN_API_KEY` was generated into `.env`** for overnight runs. Keep it or
+  regenerate with `openssl rand -hex 32`.
+- **Not done (needs you):** everything below.
+
+---
+
 Items that need approval, admin rights, a voice, a reboot, or a family member.
 Each: one line of context + the exact command to resume. ~10 supervised minutes
 of the essentials, then the multi-day bake-off/naming rituals. Nothing here was
