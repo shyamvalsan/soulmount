@@ -58,6 +58,15 @@ def test_identity_slim_is_smaller(client):
     assert "Your body, right now" not in slim
 
 
+def test_house_endpoint_returns_hard_values(client):
+    r = client.get("/v1/house", headers=AUTH)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["quiet_start"] == "21:30" and body["quiet_end"] == "07:30"
+    assert body["volume_ceiling"] == 60
+    assert body["camera_capture"] == "on-request-only"
+
+
 def test_auth_missing_token_401(client):
     assert client.get("/v1/identity").status_code == 401
     assert client.post("/v1/remember", json={"note": "x"}).status_code == 401

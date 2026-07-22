@@ -96,6 +96,19 @@ async def identity(request: Request, slim: bool = False):
     return {"instructions": result.text, "soul_version": result.soul_version}
 
 
+@app.get("/v1/house", dependencies=[Depends(require_auth)])
+async def house_rules(request: Request):
+    """Machine-readable HOUSE.md hard-rule values so the body app can enforce them
+    mechanically (§7.4 / guardrail 10) — the robot has no local data dir."""
+    h = ctx(request).house()
+    return {
+        "quiet_start": h.quiet_start.strftime("%H:%M"),
+        "quiet_end": h.quiet_end.strftime("%H:%M"),
+        "volume_ceiling": h.volume_ceiling,
+        "camera_capture": h.camera_capture,
+    }
+
+
 @app.post("/v1/chat/completions", dependencies=[Depends(require_auth)])
 async def chat_completions(request: Request):
     c = ctx(request)
