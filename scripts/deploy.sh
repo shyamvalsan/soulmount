@@ -26,7 +26,9 @@ start_soulmount() {
 }
 verify() {
   sleep 3
-  if curl -s -m 8 "$RBASE/api/apps/current-app-status" | grep -qi soulmount; then
+  # Parse the actual current-app field rather than substring-matching raw JSON.
+  if curl -s -m 8 "$RBASE/api/apps/current-app-status" \
+       | jq -e '(.app_name // .name // .app // "")|test("soulmount";"i")' >/dev/null 2>&1; then
     ok "soulmount visible in dashboard"
   else
     err "soulmount not visible after start"; return 1
@@ -44,7 +46,9 @@ push_env() {
   # Robot-side .env for the autostart unit's EnvironmentFile (secret, not committed).
   info "pushing robot-side .env (BRAIN_HOST etc.)"
   local tmp; tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN  # never leave the bearer key in /tmp, even on scp failure
+  # EXIT (not RETURN): under set -e a failing scp exits the shell without returning, so a
+  # RETURN trap wouldn't fire — EXIT guarantees the bearer key never lingers in /tmp.
+  trap 'rm -f "$tmp"' EXIT
   {
     echo "BRAIN_HOST=${BRAIN_HOST:-127.0.0.1}"
     echo "BRAIN_PORT=${BRAIN_PORT:-8100}"

@@ -4,8 +4,8 @@ The brain hashes ``soul/`` and ``memory/`` files at each identity compile. So th
 external edits are *seen* (never silently experienced as a gap), we keep a baseline
 of hashes:
 
-- Endpoint / me-time writes call ``note_internal_change`` — they append a
-  robot-attributed line AND advance the baseline.
+- Endpoint / me-time writes go through ``write_tracked`` — atomically (under the
+  lock) it writes the file, appends a robot-attributed line, and advances the baseline.
 - ``reconcile`` (run at compile) diffs current hashes vs the baseline; any
   remaining mismatch is therefore an EXTERNAL edit → "edited externally, likely
   by the household".
@@ -72,6 +72,12 @@ class Changelog:
         against the old baseline and cry 'edited externally'."""
         with self._lock():
             self.seed_baseline_if_missing()  # avoid a partial baseline → false "external" edits
+            # If a human edited this file since the last baseline, surface that BEFORE the
+            # robot overwrites it, so an external edit is never silently lost (§7.2 item 7).
+            if relpath in TRACKED:
+                prev, cur = self._load_baseline().get(relpath), self._hash(relpath)
+                if prev is not None and cur is not None and prev != cur:
+                    self._append_line(f"{relpath.split('/')[-1]} edited externally, likely by the household")
             self.dd.write(self.dd.path(*relpath.split("/")), content)
             self._append_line(description)
             if relpath in TRACKED:
@@ -109,22 +115,6 @@ class Changelog:
     def _append_line(self, text: str) -> None:
         ts = self._now().strftime("%Y-%m-%d %H:%M")
         self.dd.append(self.dd.memory("CHANGELOG.md"), f"- {ts}: {text}\n")
-
-    def note_internal_change(self, relpath: str, description: str) -> None:
-        """Record a robot-made change (already written to disk) and advance the
-        baseline. Prefer write_tracked() when you also control the write, so the
-        write + baseline advance are atomic."""
-        with self._lock():
-            self.seed_baseline_if_missing()  # avoid a partial baseline → false "external" edits
-            self._append_line(description)
-            if relpath in TRACKED:
-                baseline = self._load_baseline()
-                h = self._hash(relpath)
-                if h is None:
-                    baseline.pop(relpath, None)
-                else:
-                    baseline[relpath] = h
-                self._save_baseline(baseline)
 
     def seed_baseline_if_missing(self) -> None:
         """First run: adopt current files as the baseline without logging churn."""

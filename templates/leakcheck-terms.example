@@ -11,6 +11,10 @@
 #   - Add every household-identifying string: given names, nicknames, the city,
 #     the street, the bot handle, Telegram chat IDs and user IDs, the robot's
 #     chosen name, the YouTube channel/handle, any email or phone.
+#   - Also add infra identifiers: your OS username, your home-directory path, the
+#     robot/attic LAN IPs, the robot hostname, and your timezone/city. (leakcheck
+#     already auto-scans SOULMOUNT_DATA_DIR / REACHY_IP / chat-id / BUDGET_TZ values
+#     from .env, but listing them here covers any you reference indirectly.)
 #   - When in doubt, add it. A leak is a stop-everything bug (guardrail 5).
 #
 # Example entries (delete these — they are illustrations, not real):

@@ -180,8 +180,9 @@ class MeTime:
                 out = await self._dispatch(fnc.get("name", ""), args)
                 messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": out})
 
-        # A polite closing turn only if we cut it off mid-work and budget remains.
-        if limited and spend < allowance:
+        # A polite closing turn only if we cut it off mid-work, budget remains, and the
+        # shared guard hasn't gone asleep meanwhile (a concurrent conversation may have).
+        if limited and spend < allowance and not self.ctx.guard.decide().asleep:
             messages.append({"role": "user", "content":
                              "(Your time is nearly up for tonight — a brief closing note if you like, or nothing.)"})
             try:
@@ -217,8 +218,10 @@ class MeTime:
         self.ctx.guard.record("metime", result.model or model, result.usage)
         if identity.included_letter:  # any predecessor letter reached this model too
             self.ctx.identity.mark_letter_delivered(identity.included_letter)
-        today = self.ctx.now().strftime("%Y-%m-%d")
-        name = f"{today}-to-successor.md"
+        now = self.ctx.now()
+        today = now.strftime("%Y-%m-%d")
+        # Timestamped so a same-day re-run produces a fresh (undelivered) letter name.
+        name = f"{now.strftime('%Y-%m-%dT%H%M%S')}-to-successor.md"
         header = f"# Letter to my successor — {today}\n"
         if dry_run:
             header = f"# Letter to my successor — {today} (dry run)\n"

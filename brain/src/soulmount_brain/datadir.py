@@ -56,8 +56,13 @@ class DataDir:
             return default
 
     def write(self, p: Path, content: str) -> None:
+        # Atomic: write a sibling temp then rename, so a crash/torn write can never
+        # leave a half-written state file (which would trigger false "external edit"
+        # attribution or silent state loss).
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
+        tmp = p.with_name(f".{p.name}.tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(p)
 
     def append(self, p: Path, content: str) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)

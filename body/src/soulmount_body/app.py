@@ -76,32 +76,51 @@ class SoulmountApp(_Base):
             log.info("soulmount body app stopped")
 
     async def _startup_ritual(self, cfg, robot, brain, voice) -> HouseRules:
-        """Phase 3 item 2: healthy → wake + greeting; unhealthy → droop + retry."""
+        """Phase 3 item 2. Ready = healthy AND identity+house obtained (so a bad/missing
+        BRAIN_API_KEY can't silently yield default house rules + empty persona). Ready +
+        awake → wake + greeting; ready + asleep → sleep pose; not ready → droop + retry."""
+        from datetime import datetime
+
         drooped = False
         while not self._stopping():
-            if await brain.is_healthy():
-                house = HouseRules.from_dict(await brain.house())
-                identity = await brain.identity()
+            health = await brain.health()
+            ready = bool(health and health.get("status") == "ok")
+            house_data = await brain.house() if ready else None
+            identity = await brain.identity() if ready else None
+
+            if ready and house_data is not None and identity is not None:
+                house = HouseRules.from_dict(house_data)
+                quiet = house.in_quiet_hours(datetime.now().astimezone())
                 await voice.start(identity)
-                from datetime import datetime
-                if not house.in_quiet_hours(datetime.now().astimezone()):
+                asleep, wake_at = sleep_info(health)
+                if asleep:  # budget-capped at boot → goodnight path, not a greeting (§7.7)
+                    log.info("brain asleep at startup (until %s) — sleep pose", wake_at)
+                    if not quiet:
+                        await robot.play_emotion("sleep1")
+                    await robot.sleep_pose()
+                    voice.pause()
+                elif not quiet:
                     await robot.wake_up()
-                    # Keep volume under the house ceiling before any sound.
-                    vol = await robot.get_volume()
+                    vol = await robot.get_volume()  # keep volume under the ceiling first
                     if vol is not None:
                         await robot.set_volume(house.clamp_volume(vol))
                     await voice.speak(cfg.greeting)
                     log.info("greeting played")
                 else:
-                    log.info("quiet hours at startup — waking silently, no greeting")
+                    log.info("quiet hours at startup — staying still, no greeting")
                 return house
+
+            # Not ready: brain down OR healthy-but-identity/house-unavailable (bad key /
+            # misconfig). Droop + retry — never proceed silently with defaults.
             if not drooped:
-                # No motion sounds during quiet hours (guardrail 9) — droop silently.
-                from datetime import datetime
+                if ready:
+                    log.error("brain healthy but identity/house unavailable (auth failure? "
+                              "misconfig) — drooping and retrying, NOT proceeding with defaults")
+                else:
+                    log.warning("brain unreachable at startup — droop + retry")
                 if not HouseRules().in_quiet_hours(datetime.now().astimezone()):
-                    await robot.droop()
+                    await robot.droop()  # no motion sounds during quiet hours (guardrail 9)
                 drooped = True
-                log.warning("brain unreachable at startup — droop + retry")
             await self._sleep_interruptible(cfg.retry_interval_s)
         return HouseRules()
 

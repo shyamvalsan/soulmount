@@ -128,6 +128,12 @@ async def chat_completions(request: Request):
     if not isinstance(body, dict) or "messages" not in body:
         raise HTTPException(400, "missing 'messages'")
 
+    # Brain-internal routing hint (never forwarded upstream). Tags the ledger runner so
+    # channel spend is distinguishable from voice conversation (§7.7).
+    meta = body.pop("metadata", {}) or {}
+    source = meta.get("source") if isinstance(meta, dict) else None
+    runner = "channels" if isinstance(source, str) and source.startswith("telegram") else "conversation"
+
     # Budget/sleep gate FIRST — asleep means zero upstream (§7.7).
     decision = c.guard.decide()
     if decision.asleep:
@@ -184,7 +190,7 @@ async def chat_completions(request: Request):
                 # finalize() guarantees a (possibly estimated) cost even on a
                 # mid-stream disconnect, so the hard cap is never under-counted.
                 session.finalize()
-                c.guard.record("conversation", session.model, session.usage)
+                c.guard.record(runner, session.model, session.usage)
                 # Bookkeeping AFTER the stream is fully handled and guarded, so a mark
                 # failure can never leak the open stream or skip the cost record.
                 try:
@@ -201,7 +207,7 @@ async def chat_completions(request: Request):
         result = await c.provider.acomplete(body)
     except ProviderError as e:
         raise HTTPException(502, f"upstream error: {e}")
-    c.guard.record("conversation", result.model, result.usage)
+    c.guard.record(runner, result.model, result.usage)
     try:
         if injected_letter:
             c.identity.mark_letter_delivered(injected_letter)

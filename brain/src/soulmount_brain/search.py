@@ -24,7 +24,10 @@ class SearchProvider:
 
     def _c(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0))
+            from .egress import hooks_for
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(10.0, connect=5.0), event_hooks=hooks_for(self.settings)
+            )
         return self._client
 
     async def aclose(self) -> None:

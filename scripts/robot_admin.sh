@@ -23,9 +23,11 @@ case "$cmd" in
     ok "password rotated"
     ;;
   set-volume)
+    # `|| echo 60` INSIDE the substitution so a brain-down curl/pipe failure can't trip
+    # set -e before the numeric guard runs (the guard was previously dead code).
     ceiling="$(curl -s -m 6 -H "Authorization: Bearer ${BRAIN_API_KEY:-}" \
-      "http://${BRAIN_HOST:-127.0.0.1}:${BRAIN_PORT:-8100}/v1/house" | jq -r '.volume_ceiling // 60' 2>/dev/null)"
-    # Guard: brain down / empty → fall back to a safe default (never post invalid JSON).
+      "http://${BRAIN_HOST:-127.0.0.1}:${BRAIN_PORT:-8100}/v1/house" 2>/dev/null \
+      | jq -r '.volume_ceiling // 60' 2>/dev/null || echo 60)"
     [[ "$ceiling" =~ ^[0-9]+$ ]] || { warn "no ceiling from brain; defaulting to 60"; ceiling=60; }
     info "setting robot volume to HOUSE ceiling: $ceiling"
     run curl -s -X POST "http://$HOST:8000/api/volume/set" -H 'content-type: application/json' \

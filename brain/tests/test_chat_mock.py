@@ -44,6 +44,20 @@ def test_nonstream_injects_identity_and_records_cost(client, data_dir):
 
 
 @respx.mock
+def test_channels_source_tags_runner_and_metadata_not_forwarded(client, data_dir):
+    route = respx.post(URL).mock(return_value=httpx.Response(200, json=_completion(0.001)))
+    client.post("/v1/chat/completions", json={
+        "messages": [{"role": "user", "content": "hi"}], "metadata": {"source": "telegram:111"},
+    }, headers=AUTH)
+    # metadata is brain-internal — never forwarded upstream.
+    sent = json.loads(route.calls[0].request.content)
+    assert "metadata" not in sent
+    # ...and it tags the ledger runner as 'channels'.
+    entry = json.loads(list((data_dir / "ops" / "ledger").glob("*.jsonl"))[0].read_text().strip().splitlines()[-1])
+    assert entry["runner"] == "channels"
+
+
+@respx.mock
 def test_caller_system_prompt_is_not_overridden(client):
     route = respx.post(URL).mock(return_value=httpx.Response(200, json=_completion()))
     client.post("/v1/chat/completions", json={

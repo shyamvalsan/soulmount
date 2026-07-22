@@ -22,20 +22,27 @@ SSHP="${BRAIN_SSH_PORT:-2222}"
 AUSER="${BRAIN_SSH_USER:-$USER}"   # attic WSL account (distinct from the robot user)
 SSHO="-o BatchMode=yes -o ConnectTimeout=4"  # short so a degraded round can't overrun 180s much
 
-# Each gate prints PASS / FAIL / DEGRADED. FAIL = a core gate that should pass;
-# DEGRADED = an attic-dependent gate (tolerated when the attic is offline).
+# Each gate prints PASS / FAIL / DEGRADED. Robot gates (1-4) always FAIL on failure.
+# Attic gates (6,7) FAIL when the attic IS reachable (g5 PASS) but the brain/units are
+# down — a broken-but-reachable brain must NOT pass — and only DEGRADE when the attic
+# itself is offline (g5 DEGRADED), which is the tolerated degraded-mode drill.
+ATTIC_UP=0
+_tcp(){ (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null && { exec 3>&-; return 0; } || return 1; }  # nc-free
 g1(){ getent hosts "$HOST" >/dev/null 2>&1 || python3 -c "import socket;socket.gethostbyname('$HOST')" >/dev/null 2>&1 && echo PASS || echo FAIL; }
 g2(){ [ "$(curl -s -m5 -o /dev/null -w '%{http_code}' "$RBASE/docs")" = 200 ] && echo PASS || echo FAIL; }
 g3(){ [ "$(ssh $SSHO "$RUSER@$HOST" 'systemctl is-active reachy-mini-daemon' 2>/dev/null)" = active ] && echo PASS || echo FAIL; }
-g4(){ curl -s -m5 "$RBASE/api/apps/current-app-status" 2>/dev/null | grep -qi soulmount && echo PASS || echo FAIL; }
-g5(){ nc -z -w3 "$ATTIC" "$SSHP" 2>/dev/null && echo PASS || echo DEGRADED; }
+g4(){ curl -s -m5 "$RBASE/api/apps/current-app-status" 2>/dev/null \
+     | jq -e '(.app_name // .name // .app // "")|test("soulmount";"i")' >/dev/null 2>&1 && echo PASS || echo FAIL; }
+g5(){ if _tcp "$ATTIC" "$SSHP"; then ATTIC_UP=1; echo PASS; else ATTIC_UP=0; echo DEGRADED; fi; }
 g6(){ # all soulmount units active inside WSL (brain + channels + metime timer)
   local out; out="$(ssh $SSHO -p "$SSHP" "$AUSER@$ATTIC" \
      'systemctl is-active soulmount-brain soulmount-channels soulmount-metime.timer' 2>/dev/null)"
-  [ "$(echo "$out" | grep -c '^active$')" = 3 ] && echo PASS || echo DEGRADED; }
+  if [ "$(printf '%s' "$out" | grep -c '^active$')" = 3 ]; then echo PASS
+  elif [ "$ATTIC_UP" = 1 ]; then echo FAIL; else echo DEGRADED; fi; }
 g7(){ # robot -> brain LAN path (proves mirrored networking / portproxy) — key gate
-  ssh $SSHO "$RUSER@$HOST" "curl -s -m5 -o /dev/null -w '%{http_code}' http://$ATTIC:$BPORT/health" 2>/dev/null \
-     | grep -q 200 && echo PASS || echo DEGRADED; }
+  if ssh $SSHO "$RUSER@$HOST" "curl -s -m5 -o /dev/null -w '%{http_code}' http://$ATTIC:$BPORT/health" 2>/dev/null | grep -q 200
+  then echo PASS
+  elif [ "$ATTIC_UP" = 1 ]; then echo FAIL; else echo DEGRADED; fi; }
 g8(){ # greeting: the app runs UNDER reachy-mini-daemon, so its log is in that journal
   ssh $SSHO "$RUSER@$HOST" "journalctl -u reachy-mini-daemon -n 400 --no-pager 2>/dev/null | grep -qi 'greeting played'" \
      && echo PASS || echo FAIL; }

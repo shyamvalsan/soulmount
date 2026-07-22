@@ -108,7 +108,10 @@ class UpstreamProvider:
 
     def _client_or_new(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0))
+            from .egress import hooks_for
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(120.0, connect=10.0), event_hooks=hooks_for(self.settings)
+            )
         return self._client
 
     async def aclose(self) -> None:
@@ -286,9 +289,16 @@ class StreamSession:
         except json.JSONDecodeError:
             return
         for ch in obj.get("choices") or []:
-            content = (ch.get("delta") or {}).get("content")
-            if content:
-                self._content_chars += len(content)
+            delta = ch.get("delta") or {}
+            # Count content + reasoning + tool-call argument bytes so a disconnect
+            # estimate on a reasoning/tool-calling stream doesn't under-count (§7.7).
+            for field in ("content", "reasoning"):
+                if delta.get(field):
+                    self._content_chars += len(delta[field])
+            for tc in delta.get("tool_calls") or []:
+                args = (tc.get("function") or {}).get("arguments")
+                if args:
+                    self._content_chars += len(args)
         if obj.get("usage"):
             self.usage = self.provider._usage_from_payload(
                 obj.get("model") or self.model, obj["usage"]

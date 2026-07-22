@@ -94,20 +94,30 @@ for pat in "${SECRET_PATTERNS[@]}"; do
   fi
 done
 
-# ── 3) The ACTUAL secret values from .env (covers any format the patterns miss,
-#        e.g. a bare-hex BRAIN_API_KEY or an arbitrary upstream key). Never printed. ──
+# ── 3) The ACTUAL values from .env — secrets (any format the patterns miss, e.g. a
+#        bare-hex BRAIN_API_KEY) AND household identifiers (home-dir path w/ username,
+#        LAN IP, chat IDs, timezone) that aren't secret keys. Never printed. ──
 if [ "$HAVE_ENV" = 1 ]; then
+  _scan_env_value() {  # $1=value $2=label
+    local v="$1" label="$2"
+    [ -n "$v" ] || return 0
+    case "$v" in 127.0.0.1 | 0.0.0.0 | localhost | reachy-mini.local | UTC) return 0 ;; esac
+    if hits="$(grep -rInHF -- "$v" "${SCAN_FILES[@]}" 2>/dev/null)"; then
+      echo -e "${RED}✗ LEAK: a $label value from .env appears in a committable file:${NC}"
+      echo "${hits//"$v"/***REDACTED-ENV-$label***}" | sed 's/^/    /'
+      fail=1
+    fi
+  }
   while IFS='=' read -r k v; do
+    v="$(printf '%s' "$v" | tr -d "\"'" | tr -d '[:space:]')"
     case "$k" in
       *KEY | *TOKEN | *SECRET | *PASSWORD)
-        v="$(printf '%s' "$v" | tr -d "\"'" | tr -d '[:space:]')"
-        [ "${#v}" -ge 16 ] || continue  # skip empty / trivially-short values
-        if hits="$(grep -rInHF -- "$v" "${SCAN_FILES[@]}" 2>/dev/null)"; then
-          echo -e "${RED}✗ LEAK: a secret VALUE from .env appears in a committable file:${NC}"
-          echo "${hits//"$v"/***REDACTED-ENV-SECRET***}" | sed 's/^/    /'
-          fail=1
-        fi
-        ;;
+        [ "${#v}" -ge 16 ] && _scan_env_value "$v" "SECRET" ;;
+      SOULMOUNT_DATA_DIR | REACHY_IP | BRAIN_HOST | TELEGRAM_FAMILY_CHAT_ID | BUDGET_TZ)
+        [ "${#v}" -ge 7 ] && _scan_env_value "$v" "IDENTIFIER" ;;
+      TELEGRAM_ALLOWED_USER_IDS)
+        IFS=',' read -ra _ids <<< "$v"
+        for _id in "${_ids[@]}"; do [ "${#_id}" -ge 6 ] && _scan_env_value "$_id" "IDENTIFIER"; done ;;
     esac
   done < <(grep -vE '^\s*(#|$)' .env)
 fi

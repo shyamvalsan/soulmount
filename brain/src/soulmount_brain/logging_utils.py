@@ -5,13 +5,19 @@ from __future__ import annotations
 import logging
 import re
 
-# Patterns mirror scripts/leakcheck.sh; redact before anything reaches a log sink.
+# Kept in sync with scripts/leakcheck.sh SECRET_PATTERNS; redact before any log sink.
 _SECRET_RE = re.compile(
-    r"(sk-or-v[0-9]-[A-Za-z0-9]{8,}"
-    r"|sk-ant-[A-Za-z0-9_-]{12,}"
-    r"|sk-[A-Za-z0-9]{20,}"
-    r"|[0-9]{8,10}:[A-Za-z0-9_-]{35}"
-    r"|Bearer\s+[A-Za-z0-9._-]{16,})"
+    r"(sk-or-v[0-9]-[A-Za-z0-9]{8,}"        # OpenRouter
+    r"|sk-ant-[A-Za-z0-9_-]{12,}"           # Anthropic
+    r"|sk-[A-Za-z0-9]{20,}"                 # OpenAI-style
+    r"|[0-9]{8,10}:[A-Za-z0-9_-]{35}"       # Telegram bot token
+    r"|AKIA[0-9A-Z]{16}"                    # AWS
+    r"|AIza[0-9A-Za-z_-]{35}"               # Google API key
+    r"|GOCSPX-[A-Za-z0-9_-]{20,}"           # Google OAuth client secret
+    r"|BSA[A-Za-z0-9_-]{24,}"               # Brave Search API key
+    r"|ghp_[0-9A-Za-z]{36}"                 # GitHub PAT
+    r"|Bearer\s+[A-Za-z0-9._-]{16,}"        # bearer header (incl. bare-hex BRAIN_API_KEY)
+    r"|[0-9a-fA-F]{48,})"                   # long bare hex (e.g. an unprefixed BRAIN_API_KEY)
 )
 
 

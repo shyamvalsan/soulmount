@@ -37,7 +37,11 @@ class TelegramAPI:
 
     def _c(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(65.0, connect=10.0))
+            from .egress import event_hooks
+            # This client only ever talks to Telegram — pin it there (guardrail 6).
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(65.0, connect=10.0), event_hooks=event_hooks({"api.telegram.org"})
+            )
         return self._client
 
     async def aclose(self) -> None:
