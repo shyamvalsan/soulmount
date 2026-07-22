@@ -162,11 +162,6 @@ async def chat_completions(request: Request):
             await session.start()
         except ProviderError as e:
             raise HTTPException(502, f"upstream error: {e}")
-        # The model has now accepted the turn: consume the letter / mark goodnight used.
-        if injected_letter:
-            c.identity.mark_letter_delivered(injected_letter)
-        if decision.state == "goodnight":
-            c.guard.mark_goodnight_used()
 
         async def gen():
             try:
@@ -177,6 +172,15 @@ async def chat_completions(request: Request):
                 # mid-stream disconnect, so the hard cap is never under-counted.
                 session.finalize()
                 c.guard.record("conversation", session.model, session.usage)
+                # Bookkeeping AFTER the stream is fully handled and guarded, so a mark
+                # failure can never leak the open stream or skip the cost record.
+                try:
+                    if injected_letter:
+                        c.identity.mark_letter_delivered(injected_letter)
+                    if decision.state == "goodnight":
+                        c.guard.mark_goodnight_used(reason=decision.reason)
+                except Exception as e:
+                    log.warning("post-stream bookkeeping failed: %s", e)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -185,10 +189,13 @@ async def chat_completions(request: Request):
     except ProviderError as e:
         raise HTTPException(502, f"upstream error: {e}")
     c.guard.record("conversation", result.model, result.usage)
-    if injected_letter:
-        c.identity.mark_letter_delivered(injected_letter)
-    if decision.state == "goodnight":
-        c.guard.mark_goodnight_used()
+    try:
+        if injected_letter:
+            c.identity.mark_letter_delivered(injected_letter)
+        if decision.state == "goodnight":
+            c.guard.mark_goodnight_used(reason=decision.reason)
+    except Exception as e:
+        log.warning("post-turn bookkeeping failed: %s", e)
     return JSONResponse(result.raw or {
         "id": result.id,
         "model": result.model,

@@ -128,28 +128,36 @@ class BudgetGuard:
             # Into the reserve — permit ONE final short completion, then sleep.
             reason = "monthly" if rem_month <= reserve else "daily"
             wake = self._first_of_next_month(when) if reason == "monthly" else self._next_midnight(when)
-            if self._goodnight_used(when):
+            if self._goodnight_used(when, reason):
                 return BudgetDecision("asleep", reason, wake, rem_day, rem_month, None)
             return BudgetDecision("goodnight", reason, None, rem_day, rem_month, GOODNIGHT_MAX_TOKENS)
 
         return BudgetDecision("awake", None, None, rem_day, rem_month, None)
 
-    # Goodnight is granted at most once per day (SPEC §7.7: "one final short completion").
+    # Goodnight is granted at most once per sleep PERIOD (SPEC §7.7: "one final short
+    # completion") — per day for a daily cap, per month for a monthly cap.
     def _goodnight_path(self):
         return self.dd.path("ops", "state", "goodnight.json")
 
-    def _goodnight_used(self, when: datetime) -> bool:
+    def _goodnight_used(self, when: datetime, reason: str) -> bool:
         raw = self.dd.read(self._goodnight_path())
         if not raw:
             return False
         try:
-            return json.loads(raw).get("date") == when.date().isoformat()
+            data = json.loads(raw)
         except json.JSONDecodeError:
             return False
+        if reason == "monthly":
+            return data.get("month") == f"{when.year:04d}-{when.month:02d}"
+        return data.get("date") == when.date().isoformat()
 
-    def mark_goodnight_used(self, when: datetime | None = None) -> None:
+    def mark_goodnight_used(self, when: datetime | None = None, reason: str = "daily") -> None:
         when = when or self.now()
-        self.dd.write(self._goodnight_path(), json.dumps({"date": when.date().isoformat()}))
+        self.dd.write(self._goodnight_path(), json.dumps({
+            "date": when.date().isoformat(),
+            "month": f"{when.year:04d}-{when.month:02d}",
+            "reason": reason,
+        }))
 
     # ── Ledger writes ─────────────────────────────────────────────────────────
     def record(self, runner: str, model: str, usage: Usage, when: datetime | None = None) -> dict:

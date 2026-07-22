@@ -42,6 +42,18 @@ fail=0
 
 # ── 1) Personal terms (case-insensitive) ─────────────────────────────────────
 TERMS_FILE="${DATA_DIR:+$DATA_DIR/.leakcheck-terms}"
+terms_missing() {
+  # Owner's box (has .env) → require real terms; else clean-room contributor → allow.
+  if [ "$HAVE_ENV" = 1 ]; then
+    echo -e "${RED}✗ leakcheck: .env present but no household terms defined.${NC}"
+    echo -e "${RED}  Run 'make init-data' and fill \$SOULMOUNT_DATA_DIR/.leakcheck-terms${NC}"
+    echo -e "${RED}  (names, city, chat IDs…). Refusing to pass the term gate with 0 terms.${NC}"
+    fail=1
+  else
+    echo -e "${YELLOW}⚠ No household terms (clean-room) — term scan skipped; secret scan only.${NC}"
+  fi
+}
+
 if [ -n "$TERMS_FILE" ] && [ -f "$TERMS_FILE" ]; then
   TMP_TERMS="$(mktemp)"; trap 'rm -f "$TMP_TERMS"' EXIT
   grep -vE '^\s*(#|$)' "$TERMS_FILE" | sed 's/[[:space:]]*$//' > "$TMP_TERMS" || true
@@ -51,15 +63,13 @@ if [ -n "$TERMS_FILE" ] && [ -f "$TERMS_FILE" ]; then
       echo "$hits" | sed 's/^/    /'
       fail=1
     fi
+  else
+    # File exists but every line is a comment/blank → NOT configured. Fail closed
+    # on the owner's box (this was a silent-green hole right after init-data).
+    terms_missing
   fi
-elif [ "$HAVE_ENV" = 1 ]; then
-  # Owner's box (has .env) but no terms file → misconfiguration; fail CLOSED.
-  echo -e "${RED}✗ leakcheck: .env present but no readable \$SOULMOUNT_DATA_DIR/.leakcheck-terms.${NC}"
-  echo -e "${RED}  Run 'make init-data' (or fix SOULMOUNT_DATA_DIR). Refusing to pass the term gate.${NC}"
-  fail=1
 else
-  # Clean-room clone / OSS contributor (no .env, no household data) → secret scan only.
-  echo -e "${YELLOW}⚠ No .env / .leakcheck-terms — term scan skipped (clean-room); secret scan only.${NC}"
+  terms_missing
 fi
 
 # ── 2) Secret / token patterns (redacted in output) ──────────────────────────
@@ -69,7 +79,9 @@ SECRET_PATTERNS=(
   'sk-[A-Za-z0-9]{32,}'                           # OpenAI-style
   '[0-9]{8,10}:[A-Za-z0-9_-]{35}'                 # Telegram bot token
   'AKIA[0-9A-Z]{16}'                              # AWS
-  'AIza[0-9A-Za-z_-]{35}'                         # Google
+  'AIza[0-9A-Za-z_-]{35}'                         # Google API key
+  'GOCSPX-[A-Za-z0-9_-]{20,}'                     # Google OAuth client secret (YouTube)
+  'BSA[A-Za-z0-9_-]{24,}'                         # Brave Search API key
   'ghp_[0-9A-Za-z]{36}'                           # GitHub PAT
   'BRAIN_API_KEY[[:space:]]*[=:][[:space:]]*[0-9a-fA-F]{32,}'  # our bearer (scoped)
   'Bearer[[:space:]]+[0-9a-fA-F]{48,}'            # bare-hex bearer (avoids uv.lock sha256:)

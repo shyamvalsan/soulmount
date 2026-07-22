@@ -82,6 +82,16 @@ async def test_stream_finalize_estimates_cost_on_disconnect():
     await p.aclose()
 
 
+async def test_cost_estimate_fails_closed_for_unknown_model():
+    # No provider cost + no price row must NOT record $0 (that would let the cap fail
+    # open). A high fallback rate is charged so the budget guard still engages.
+    p = UpstreamProvider(_settings())
+    u = p._estimate_usage("some/unpriced-model", 1_000_000, 0)
+    assert u.estimated is True
+    assert u.cost_usd > 0
+    await p.aclose()
+
+
 @respx.mock
 async def test_stream_start_raises_on_4xx_before_bytes():
     respx.post(URL).mock(return_value=httpx.Response(429, text="rate limited"))

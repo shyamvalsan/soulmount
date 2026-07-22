@@ -44,6 +44,7 @@ push_env() {
   # Robot-side .env for the autostart unit's EnvironmentFile (secret, not committed).
   info "pushing robot-side .env (BRAIN_HOST etc.)"
   local tmp; tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN  # never leave the bearer key in /tmp, even on scp failure
   {
     echo "BRAIN_HOST=${BRAIN_HOST:-127.0.0.1}"
     echo "BRAIN_PORT=${BRAIN_PORT:-8100}"
@@ -52,7 +53,6 @@ push_env() {
     echo "VOICE_BACKEND=${VOICE_BACKEND:-local}"
   } > "$tmp"
   run scp "$tmp" "$SSH_USER@$HOST:$REMOTE_DIR/.env"
-  rm -f "$tmp"
 }
 pip_install() {
   info "pip install -e .[robot] into $APPS_VENV (git-lfs deps → pip, not uv)"

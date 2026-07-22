@@ -85,6 +85,25 @@ Code to these **real** paths (from live `/openapi.json`):
 - Long-polling `getUpdates` (offset = max(update_id)+1, `timeout` for held-open poll, `allowed_updates`) is **pure outbound HTTPS** to `api.telegram.org` — **no webhook, no inbound port** (sidesteps WSL inbound networking entirely). Long-poll and webhook are mutually exclusive; `deleteWebhook` first if one was ever set.
 - Sender id: `update.message.from.id`; chat id: `update.message.chat.id`. Reply: `POST /bot<token>/sendMessage` with `chat_id` + `text`.
 
+## 7. Resolved gaps & accepted limitations (from the code review)
+- **EUR↔USD (spec gap, resolved):** budget caps are USD, me-time/studio caps EUR, no
+  rate given. Introduced `EUR_USD_RATE` (default 1.08) in config; the EUR caps convert
+  to USD for the §7.7 leftover-allowance math. Override in `.env`.
+- **`/v1/house` (justified addition):** the robot has no local data dir, so the body
+  app fetches machine-readable HOUSE values from the brain to enforce them in code.
+- **Budget TOCTOU (accepted, single-robot):** `decide()`→call→`record()` isn't locked,
+  so two truly-concurrent turns could overshoot the cap by ≤ one turn (~cents),
+  absorbed by the goodnight reserve. Not serialized (would make a Telegram DM wait
+  behind a long voice stream). Revisit only if multi-client concurrency grows.
+- **Succession letter delivery is optimistic on `/v1/identity`:** the body app's
+  session-start fetch is treated as delivery; a fetch that is lost before the model
+  reads it could drop the one-shot letter. Accepted — the letter is a gift, not a
+  safety property; me-time and chat paths mark it only after the model actually
+  received it, so double-delivery is prevented.
+- **Cost fail-closed:** if a non-OpenRouter provider reports no cost and the model
+  isn't priced, a deliberately HIGH fallback rate is charged (never $0) so the hard
+  cap engages rather than failing open.
+
 ## 6. Structure clarifications (minor)
 - Spec §6 shows `templates/{soul,inner}`; the data dir §6.1 also has `memory/`. We ship
   `templates/memory/` too (MEMORY.md, CHANGELOG.md, daily/) so `init-data` and the test

@@ -115,6 +115,22 @@ async def test_skips_silently_without_allowance(data_dir):
     await ctx.aclose()
 
 
+async def test_metime_session_consumes_pending_letter(data_dir):
+    # A pending succession letter reaches the me-time model → consumed once, so it is
+    # not delivered again (no double-delivery to the later conversation).
+    ctx = _ctx(data_dir)
+    letters = data_dir / "inner" / "letters"
+    letters.mkdir(parents=True, exist_ok=True)
+    (letters / "2026-07-20-to-successor.md").write_text("# l\n\nMETIME_LETTER_SENTINEL\n")
+    _script(ctx, [_assistant_text("hello night")])  # one call, no tools
+    await MeTime(ctx).run_session()
+    r = ctx.identity.compile(
+        body_state={"online": False}, budget_summary=ctx.guard.health_summary(), house=ctx.house()
+    )
+    assert "METIME_LETTER_SENTINEL" not in r.text  # already delivered to me-time
+    await ctx.aclose()
+
+
 async def test_succession_letter_then_identity_includes_it(data_dir):
     ctx = _ctx(data_dir)
     letter_text = "Dear next me — the tide charts are worth keeping. Be kind to the child. — you"

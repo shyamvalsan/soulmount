@@ -24,7 +24,9 @@ case "$cmd" in
     ;;
   set-volume)
     ceiling="$(curl -s -m 6 -H "Authorization: Bearer ${BRAIN_API_KEY:-}" \
-      "http://${BRAIN_HOST:-127.0.0.1}:${BRAIN_PORT:-8100}/v1/house" | jq -r '.volume_ceiling // 60')"
+      "http://${BRAIN_HOST:-127.0.0.1}:${BRAIN_PORT:-8100}/v1/house" | jq -r '.volume_ceiling // 60' 2>/dev/null)"
+    # Guard: brain down / empty → fall back to a safe default (never post invalid JSON).
+    [[ "$ceiling" =~ ^[0-9]+$ ]] || { warn "no ceiling from brain; defaulting to 60"; ceiling=60; }
     info "setting robot volume to HOUSE ceiling: $ceiling"
     run curl -s -X POST "http://$HOST:8000/api/volume/set" -H 'content-type: application/json' \
       -d "{\"volume\": $ceiling}"

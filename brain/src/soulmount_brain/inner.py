@@ -41,19 +41,16 @@ class Inner:
 
     def interests_replace(self, markdown: str) -> Path:
         """Replace INTERESTS.md wholesale (robot-authored). Previous versions are
-        retrievable via the data dir's local git."""
-        p = self.dd.inner("INTERESTS.md")
-        self.dd.write(p, markdown.rstrip() + "\n")
-        self.changelog.note_internal_change(
-            "inner/INTERESTS.md", "INTERESTS.md updated by the robot (via /v1/inner/interests)"
+        retrievable via the data dir's local git. Write + attribution are atomic."""
+        self.changelog.write_tracked(
+            "inner/INTERESTS.md", markdown.rstrip() + "\n",
+            "INTERESTS.md updated by the robot (via /v1/inner/interests)",
         )
-        return p
+        return self.dd.inner("INTERESTS.md")
 
     def self_update(self, markdown: str) -> Path:
-        """SELF.md is the robot's own (via me time). Records an internal change."""
-        p = self.dd.soul("SELF.md")
-        self.dd.write(p, markdown.rstrip() + "\n")
-        self.changelog.note_internal_change(
-            "soul/SELF.md", "SELF.md updated by the robot (me time)"
+        """SELF.md is the robot's own (via me time). Write + attribution are atomic."""
+        self.changelog.write_tracked(
+            "soul/SELF.md", markdown.rstrip() + "\n", "SELF.md updated by the robot (me time)"
         )
-        return p
+        return self.dd.soul("SELF.md")

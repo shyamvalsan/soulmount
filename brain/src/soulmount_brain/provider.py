@@ -33,6 +33,11 @@ _DEFAULT_PRICES: dict[str, dict[str, float]] = {
     "x-ai/grok-4.20": {"prompt": 1.25, "completion": 2.50},
 }
 
+# When a non-OpenRouter provider reports no cost AND the model isn't priced, we must
+# NOT record $0 (that would let the hard cap fail OPEN). Use a deliberately high
+# fallback so the budget guard decrements aggressively and errs toward sleeping.
+_UNKNOWN_PRICE = {"prompt": 15.0, "completion": 45.0}
+
 
 @dataclass
 class Usage:
@@ -154,8 +159,10 @@ class UpstreamProvider:
     def _estimate_cost(self, model: str, prompt_tokens: int, completion_tokens: int) -> float:
         row = self._prices.get(model)
         if not row:
-            log.warning("no cost from provider and no price-table entry for %s; cost=0", model)
-            return 0.0
+            # Fail CLOSED, not open: charge a high fallback rate so the cap still bites.
+            log.warning("no provider cost and no price-table entry for %s; using high "
+                        "fallback rate so the budget cap still engages", model)
+            row = _UNKNOWN_PRICE
         return round(
             prompt_tokens / 1_000_000 * row.get("prompt", 0.0)
             + completion_tokens / 1_000_000 * row.get("completion", 0.0),

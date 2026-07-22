@@ -140,23 +140,31 @@ class MeTime:
         identity = await self._identity()
         tools = _tool_schemas(self.search.available(), self.s.studio_enabled)
         messages = [
-            {"role": "system", "content": identity},
+            {"role": "system", "content": identity.text},
             {"role": "user", "content": self._session_prompt(allowance)},
         ]
         closing_reserve = min(allowance * 0.25, 0.03)
         spend = 0.0
         calls = 0
         limited = False
+        letter_pending = identity.included_letter  # consume once it reaches the model
 
         while True:
             if calls >= self.s.metime_max_tool_calls or spend >= (allowance - closing_reserve):
                 limited = True
+                break
+            # Re-check the shared budget each turn: a concurrent conversation may have
+            # driven the brain asleep since we started (§7.1 every call is guarded).
+            if self.ctx.guard.decide().asleep:
                 break
             result = await self.ctx.provider.acomplete(
                 {"model": model, "messages": messages, "tools": tools, "tool_choice": "auto"}
             )
             self.ctx.guard.record("metime", result.model or model, result.usage)
             spend += result.usage.cost_usd
+            if letter_pending:  # the me-time model has now received the letter
+                self.ctx.identity.mark_letter_delivered(letter_pending)
+                letter_pending = None
             msg = (result.raw.get("choices") or [{}])[0].get("message") or {"role": "assistant", "content": result.text}
             messages.append(msg)
             tool_calls = msg.get("tool_calls")
@@ -202,11 +210,13 @@ class MeTime:
         )
         result = await self.ctx.provider.acomplete(
             {"model": model, "messages": [
-                {"role": "system", "content": identity},
+                {"role": "system", "content": identity.text},
                 {"role": "user", "content": prompt},
             ], "max_tokens": 1500}
         )
         self.ctx.guard.record("metime", result.model or model, result.usage)
+        if identity.included_letter:  # any predecessor letter reached this model too
+            self.ctx.identity.mark_letter_delivered(identity.included_letter)
         today = self.ctx.now().strftime("%Y-%m-%d")
         name = f"{today}-to-successor.md"
         header = f"# Letter to my successor — {today}\n"
@@ -218,11 +228,11 @@ class MeTime:
         return {"written": True, "file": p.name, "dry_run": dry_run, "spend_usd": round(result.usage.cost_usd, 6)}
 
     # ── helpers ───────────────────────────────────────────────────────────────
-    async def _identity(self) -> str:
+    async def _identity(self):
         body_state = await self.ctx.body.fetch()
         return self.ctx.identity.compile(
             body_state=body_state, budget_summary=self.ctx.guard.health_summary(), house=self.ctx.house()
-        ).text
+        )
 
     def _ops_log(self, line: str) -> None:
         day = self.ctx.now().strftime("%Y-%m-%d")

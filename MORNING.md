@@ -55,6 +55,24 @@ done overnight because §2.1 / quiet hours / the attic being offline forbade it.
       Scheduler boot job, networking mode, firewall, power plan). Then `make brain-install`,
       `make migrate-data`, robot autostart unit, and `make verify-boot`. All written, none run.
 
+## F. Decisions surfaced by the code review (your call, before the relevant phase)
+- [ ] **Rotate the OpenRouter key before open-sourcing.** It's in `.env` (gitignored,
+      NOT committed — verified), so this is hygiene, not a leak: the key was handled
+      during an automated run. `openssl`/dashboard → new key → update `.env`.
+- [ ] **Is a robot-initiated `say_privately` DM "proactive"?** Today directed DMs
+      (from "text me that" in conversation) send immediately and aren't weekly-capped;
+      only `motivated_by` (memory follow-up / Sunday doodle) sends are quiet-hours-
+      deferred and capped. Decide before Phase 5 goes live whether unprompted
+      `say_privately` should also be gated. (channels.py `_send_outbox_entry`.)
+- [ ] **Mechanical anti-triangulation** (§7.4/§8): currently source-tagged in memory +
+      charter-enforced; not mechanically blocked in the send path. Decide the
+      enforcement model (per-fact source tags + a send-path check) before Phase 5 live.
+- [ ] **Egress allowlist backstop** (§9.6 "enforce in code"): today compliant by
+      construction (verified: only model-provider/telegram/search/daemon hosts are
+      called; the search tool takes a query, not a URL, so no SSRF). Decide whether to
+      add a thin host-allowlist wrapper on the shared httpx clients. Verify at runtime
+      with `ss -tnp` / provider logs (document in the runbook).
+
 ## E. Phase 2 — voice bake-off (multi-day, with the family)
 - [ ] Decide how the Grok brain sits behind the voice pipeline. **Open architecture question**
       (FACTS §3): `speech-to-speech --llm_backend responses-api` speaks the OpenAI *Responses*

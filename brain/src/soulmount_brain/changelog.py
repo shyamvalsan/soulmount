@@ -45,17 +45,42 @@ class Changelog:
 
     # Serialize changelog updates across processes (brain + me-time) so a robot's own
     # write is never misattributed as an external edit mid-update (§7.2 item 7).
+    # Writers block; reconcile (hot path, runs every compile) takes it non-blocking and
+    # skips on contention rather than stalling the async event loop — the edit is caught
+    # on the next compile.
     @contextmanager
-    def _lock(self):
+    def _lock(self, blocking: bool = True):
         lock_path = self.dd.path("ops", "state", "changelog.lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         fh = open(lock_path, "w")
+        acquired = False
         try:
-            fcntl.flock(fh, fcntl.LOCK_EX)
-            yield
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX if blocking else (fcntl.LOCK_EX | fcntl.LOCK_NB))
+                acquired = True
+            except OSError:
+                acquired = False
+            yield acquired
         finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
+            if acquired:
+                fcntl.flock(fh, fcntl.LOCK_UN)
             fh.close()
+
+    def write_tracked(self, relpath: str, content: str, description: str) -> None:
+        """Atomically (under the lock) write a tracked file, log the robot's change,
+        and advance the baseline — so a concurrent reconcile can't see the new content
+        against the old baseline and cry 'edited externally'."""
+        with self._lock():
+            self.dd.write(self.dd.path(*relpath.split("/")), content)
+            self._append_line(description)
+            if relpath in TRACKED:
+                h = self._hash(relpath)
+                baseline = self._load_baseline()
+                if h is None:
+                    baseline.pop(relpath, None)
+                else:
+                    baseline[relpath] = h
+                self._save_baseline(baseline)
 
     # ── Baseline store ────────────────────────────────────────────────────────
     def _baseline_path(self):
@@ -85,8 +110,9 @@ class Changelog:
         self.dd.append(self.dd.memory("CHANGELOG.md"), f"- {ts}: {text}\n")
 
     def note_internal_change(self, relpath: str, description: str) -> None:
-        """Record a robot-made change and advance the baseline so reconcile
-        won't later misread it as an external edit."""
+        """Record a robot-made change (already written to disk) and advance the
+        baseline. Prefer write_tracked() when you also control the write, so the
+        write + baseline advance are atomic."""
         with self._lock():
             self._append_line(description)
             if relpath in TRACKED:
@@ -105,8 +131,12 @@ class Changelog:
         self._save_baseline({rp: h for rp in TRACKED if (h := self._hash(rp)) is not None})
 
     def reconcile(self) -> list[str]:
-        """Detect external edits, log them, advance the baseline. Returns messages."""
-        with self._lock():
+        """Detect external edits, log them, advance the baseline. Non-blocking: if a
+        writer holds the lock, skip this round (the edit is caught on the next compile)
+        rather than stalling the caller's event loop."""
+        with self._lock(blocking=False) as acquired:
+            if not acquired:
+                return []
             return self._reconcile_locked()
 
     def _reconcile_locked(self) -> list[str]:

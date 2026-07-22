@@ -52,11 +52,13 @@ $trigger  = New-ScheduledTaskTrigger -AtStartup
 # not" without storing a password, while still loading that user's profile/HKCU so WSL
 # can find the distro. If the distro won't boot pre-login under S4U on your build,
 # re-register with stored credentials: schtasks /Change /TN $taskName /RU $TaskUser /RP *
-$principal= New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType S4U -RunLevel Highest
+# Reused for BOTH the boot task and the portproxy-refresh task (both must run as the
+# distro-owning user, never SYSTEM — SYSTEM has no per-user WSL distro).
+$wslPrincipal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType S4U -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal `
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $wslPrincipal `
   -Settings $settings -Force | Out-Null
-Ok "boot task '$taskName' registered as '$TaskUser'"
+Ok "boot task '$taskName' registered as '$TaskUser' (S4U)"
 
 # ── 2. Networking ────────────────────────────────────────────────────────────
 if ($Mode -eq "mirrored") {
@@ -64,21 +66,21 @@ if ($Mode -eq "mirrored") {
   $wslconfig = Join-Path $env:USERPROFILE ".wslconfig"
   # MERGE (don't clobber) — preserve any existing [wsl2] tuning (memory/processors/…).
   if (-not (Test-Path $wslconfig)) {
-    Set-Content -Path $wslconfig -Value "[wsl2]`nnetworkingMode=mirrored`n" -Encoding utf8
+    Set-Content -Path $wslconfig -Value "[wsl2]`nnetworkingMode=mirrored`n" -Encoding ascii
     Ok "created $wslconfig"
   } else {
     $lines = Get-Content $wslconfig
     if ($lines -match "networkingMode=mirrored") {
       Ok ".wslconfig already mirrored"
     } elseif ($lines -match "networkingMode=") {
-      ($lines -replace "networkingMode=.*", "networkingMode=mirrored") | Set-Content $wslconfig -Encoding utf8
+      ($lines -replace "networkingMode=.*", "networkingMode=mirrored") | Set-Content $wslconfig -Encoding ascii
       Ok "updated existing networkingMode -> mirrored (other settings preserved)"
     } elseif ($lines -match "^\[wsl2\]") {
       $out = @(); foreach ($l in $lines) { $out += $l; if ($l -match "^\[wsl2\]") { $out += "networkingMode=mirrored" } }
-      $out | Set-Content $wslconfig -Encoding utf8
+      $out | Set-Content $wslconfig -Encoding ascii
       Ok "inserted networkingMode into existing [wsl2] (other settings preserved)"
     } else {
-      Add-Content $wslconfig "`n[wsl2]`nnetworkingMode=mirrored"
+      Add-Content $wslconfig "`n[wsl2]`nnetworkingMode=mirrored" -Encoding ascii
       Ok "appended [wsl2] networkingMode=mirrored"
     }
   }
@@ -116,10 +118,10 @@ else {
              "netsh interface portproxy set v4tov4 listenport=$BrainPort connectaddress=`$ip connectport=$BrainPort; " +
              "netsh interface portproxy set v4tov4 listenport=$SshPort connectaddress=`$ip connectport=$SshPort }"
   $ra = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -Command `"$refresh`""
+  # Must run as the distro-owning user (NOT SYSTEM) — it invokes wsl.exe.
   Register-ScheduledTask -TaskName "soulmount-portproxy-refresh" -Action $ra `
-    -Trigger (New-ScheduledTaskTrigger -AtStartup) `
-    -Principal (New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest) -Force | Out-Null
-  Ok "portproxy-refresh task registered"
+    -Trigger (New-ScheduledTaskTrigger -AtStartup) -Principal $wslPrincipal -Force | Out-Null
+  Ok "portproxy-refresh task registered as '$TaskUser'"
 }
 
 # ── 3. Power plan: never sleep, hibernation off, Fast Startup off ─────────────
@@ -144,4 +146,7 @@ Ok "active hours set"
 Write-Host ""
 Ok "setup-attic.ps1 complete."
 Warn "MANUAL: set BIOS 'restore power after loss' = On. Then run 'wsl --shutdown' once to apply networking."
-Warn "Verify from the laptop with: make verify-boot"
+Warn "REQUIRED TEST: cold-reboot Windows with NO ONE logged in, then from the laptop run"
+Warn "  make verify-boot   — this proves the S4U boot task actually starts WSL pre-login."
+Warn "If WSL did NOT start (gates 5-7 DEGRADED), switch the boot task to stored credentials:"
+Warn "  schtasks /Change /TN soulmount-wsl-boot /RU $TaskUser /RP *   (prompts for the password)"

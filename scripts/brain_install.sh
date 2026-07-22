@@ -10,7 +10,11 @@ source "$HERE/lib.sh"; load_env
 
 UV="$(command -v uv || echo "$HOME/.local/bin/uv")"
 USER_NAME="$(id -un)"
-BRAIN_BIND="${BRAIN_HOST:-0.0.0.0}"
+# Bind 0.0.0.0 inside WSL: under portproxy/NAT the distro has only a private 172.x
+# address, so binding the LAN IP (BRAIN_HOST) would fail and crash-loop. Exposure is
+# scoped by the Hyper-V/Windows firewall (LocalSubnet) from setup-attic.ps1, and the
+# API is bearer-authed. (SPEC §7.1 "bind to LAN interface" — the firewall is the fence.)
+BRAIN_BIND="0.0.0.0"
 PORT="${BRAIN_PORT:-8100}"
 HOUR="${METIME_HOUR:-23}"
 ENVFILE="$ROOT/.env"

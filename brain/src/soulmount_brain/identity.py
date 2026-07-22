@@ -181,9 +181,11 @@ class IdentityCompiler:
             section("Your interests (INTERESTS.md)", interests),
         ]
         # Trim recent-days first if we're over budget (keep MEMORY + INTERESTS).
+        # daily_blocks is newest-first (recent_daily_files sorts reverse=True), so pop
+        # the LAST element to drop the OLDEST day and keep the most recent context.
         mem_text = "".join(p for p in mem_parts if p)
         while est_tokens(mem_text) > budget_left and daily_blocks:
-            daily_blocks.pop(0)  # drop the oldest day
+            daily_blocks.pop()  # drop the oldest day
             mem_parts[1] = section("Recent days", "\n\n".join(daily_blocks))
             mem_text = "".join(p for p in mem_parts if p)
         # If still over after dropping every daily file, truncate MEMORY.md so the

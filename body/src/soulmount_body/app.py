@@ -34,6 +34,7 @@ except Exception:  # pragma: no cover - exercised only off-robot
 
 class SoulmountApp(_Base):
     def __init__(self) -> None:
+        super().__init__()  # let the base (ReachyMiniApp) initialise its own state
         self.stop_event = threading.Event()
 
     # The daemon calls run() with a connected instance + stop_event.
@@ -102,10 +103,35 @@ class SoulmountApp(_Base):
         from datetime import datetime
 
         was_asleep = False
+        was_down = False
         while not self._stopping():
             health = await brain.health()
-            asleep, wake_at = sleep_info(health)
             quiet = house.in_quiet_hours(datetime.now().astimezone())
+
+            # Brain unreachable mid-session → droop + pause (not silently "awake"),
+            # and refresh identity/house when it returns (Phase 3 item 2 auto-recovery).
+            if health is None:
+                if not was_down:
+                    log.warning("brain unreachable mid-session — antenna droop, pausing")
+                    if not quiet:
+                        await robot.droop()
+                    voice.pause()
+                    was_down = True
+                await self._sleep_interruptible(cfg.retry_interval_s)
+                continue
+            if was_down:
+                log.info("brain reachable again — refreshing identity/house")
+                refreshed = await brain.house()
+                if refreshed:
+                    house = HouseRules.from_dict(refreshed)
+                await voice.start(await brain.identity())
+                if not quiet:
+                    await robot.wake_up()
+                voice.resume()
+                was_down = False
+                was_asleep = False
+
+            asleep, wake_at = sleep_info(health)
 
             if asleep and not was_asleep:
                 # Zero-token goodnight. The wind-down emotion can make motion sounds,
