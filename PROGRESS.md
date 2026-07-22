@@ -113,3 +113,25 @@ Append-only. ~Every 30 min or per acceptance item: done / next / blockers / spen
 - **Next:** round 6 = final full-scope confirmation (round 5 had a Critical → verify no
   regression in the fixes). Then converge.
 - **Spend so far:** ~$0.10.
+
+### 2026-07-23 05:10 EEST — review round 6 applied; loop converged; overnight scope DONE
+- **Done:** 6th re-review. Fixed a spec-mandated verify_boot gate-5 gap (distinguish
+  "attic off" vs "WSL didn't boot" + the exact §Phase4 diagnosis), an SSH-user regression
+  in migrate/inventory, a netsh portproxy bug, clipped INTERESTS in identity, offloaded
+  the flock write off the event loop, disabled brain dev-docs, tightened me-time token
+  clamp + body mid-session recovery, added 4 body startup-ritual tests, extended
+  leakcheck --history to .env values.
+- **Convergence call:** brain-core + leak dimensions are CONVERGED (round-6 reviewers:
+  "critical guarantees hold" / "clean, production-grade, no active leak"). All remaining
+  review churn was in the attic/Phase-4 ops scripts, which CANNOT be executed overnight
+  (no attic PC) — their real acceptance is the owner's morning reboot drills (§Phase 4).
+  Stopping the full-sweep loop here is the honest call: further blind static-fix cycles on
+  un-runnable code have diminishing returns + regression risk (round 5 caught a round-4
+  regression). 6 rounds, same prompts, never narrowed; every validated finding fixed.
+- **Final state:** 18 commits, leakcheck tree+history green at HEAD. **61 automated tests
+  pass** (57 brain offline + 4 live grok-4.5) + **16 body** = 77 total; live-verified:
+  OpenAI-client compat (stream+non-stream), persona golden, me-time (journal/doodle/
+  SELF/succession). Total model spend for the night ≈ **$0.10**.
+- **Next (owner, morning):** MORNING.md checklist — robot key/password + smoke, `make
+  init-data`, attic inventory + Phase 4 reboot drills, Phase 2 voice bake-off, and the
+  §F design decisions. Rotate the dev OpenRouter key if desired (not leaked; gitignored).

@@ -54,6 +54,13 @@ done overnight because §2.1 / quiet hours / the attic being offline forbade it.
 - [ ] **Phase 4 appliance**: review & run `scripts/windows/setup-attic.ps1` as admin (Task
       Scheduler boot job, networking mode, firewall, power plan). Then `make brain-install`,
       `make migrate-data`, robot autostart unit, and `make verify-boot`. All written, none run.
+- [ ] **The attic/Phase-4 scripts are the ONLY part not executed overnight** (no attic PC).
+      They passed 6 rounds of static review + all fixes, but their real acceptance is the
+      §Phase 4 reboot drills — `verify_boot` (incl. the "WSL didn't start" diagnosis),
+      `setup-attic.ps1` (esp. the S4U cold-boot test → stored-cred fallback if it fails),
+      `migrate_data`, `attic_inventory`. Set `BRAIN_SSH_USER` in `.env` (the WSL account,
+      not the robot's `pollen`). Also add the robot-side `soulmount-autostart.service`
+      generator during Phase 4 (SPEC §Phase 4 fallback path) — not written overnight.
 
 ## F. Decisions surfaced by the code review (your call, before the relevant phase)
 - [ ] **Rotate the OpenRouter key before open-sourcing.** It's in `.env` (gitignored,
