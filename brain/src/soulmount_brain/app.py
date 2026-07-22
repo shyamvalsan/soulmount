@@ -7,6 +7,7 @@ All personal file I/O resolves through $SOULMOUNT_DATA_DIR.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import time
 from contextlib import asynccontextmanager
@@ -46,7 +47,9 @@ async def lifespan(app: FastAPI):
         await app.state.ctx.aclose()
 
 
-app = FastAPI(title="soulmount-brain", version=__version__, lifespan=lifespan)
+# A LAN service, not a browsable API — disable the interactive schema/docs surface.
+app = FastAPI(title="soulmount-brain", version=__version__, lifespan=lifespan,
+              docs_url=None, redoc_url=None, openapi_url=None)
 
 
 def ctx(request: Request) -> BrainContext:
@@ -260,7 +263,9 @@ async def inner_wishlist(request: Request, payload: WishlistIn):
 @app.post("/v1/inner/interests", dependencies=[Depends(require_auth)])
 async def inner_interests(request: Request, payload: InterestsIn):
     c = ctx(request)
-    c.inner.interests_replace(payload.markdown)
+    # interests_replace takes a blocking cross-process file lock — run it off the event
+    # loop so a concurrent me-time write can't stall the brain's async loop.
+    await asyncio.to_thread(c.inner.interests_replace, payload.markdown)
     return {"ok": True}
 
 

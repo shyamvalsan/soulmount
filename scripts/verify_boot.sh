@@ -29,21 +29,34 @@ SSHO="-o BatchMode=yes -o ConnectTimeout=4"  # short so a degraded round can't o
 # subshell, so g6/g7 re-test attic reachability with _tcp themselves rather than trust a
 # variable a subshell can't export.
 _tcp(){ timeout 4 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }  # bounded, nc-free
+# Is the attic WINDOWS host up at all (independent of the WSL sshd)? ICMP first (often
+# firewalled), then common Windows ports. Distinguishes "host off" from "host on, WSL
+# never booted" — the §Phase 4 gate-5 diagnosis.
+_attic_host_up(){ ping -c1 -W2 "$ATTIC" >/dev/null 2>&1 && return 0
+  for wp in 3389 445 135 22; do _tcp "$ATTIC" "$wp" && return 0; done; return 1; }
+# g5 records host up/down to a FILE (survives the command-sub subshells); g6/g7 read it
+# so a broken-but-reachable brain FAILs while a genuinely-offline attic DEGRADEs.
+ATTIC_STATE="$(mktemp)"; trap 'rm -f "$ATTIC_STATE"' EXIT
+_attic_up(){ [ "$(cat "$ATTIC_STATE" 2>/dev/null)" = up ]; }
 g1(){ getent hosts "$HOST" >/dev/null 2>&1 || python3 -c "import socket;socket.gethostbyname('$HOST')" >/dev/null 2>&1 && echo PASS || echo FAIL; }
 g2(){ [ "$(curl -s -m5 -o /dev/null -w '%{http_code}' "$RBASE/docs")" = 200 ] && echo PASS || echo FAIL; }
 g3(){ [ "$(ssh $SSHO "$RUSER@$HOST" 'systemctl is-active reachy-mini-daemon' 2>/dev/null)" = active ] && echo PASS || echo FAIL; }
 g4(){ curl -s -m5 "$RBASE/api/apps/current-app-status" 2>/dev/null \
      | jq -e '(.app_name // .name // .app // "")|test("soulmount";"i")' >/dev/null 2>&1 && echo PASS || echo FAIL; }
-g5(){ _tcp "$ATTIC" "$SSHP" && echo PASS || echo DEGRADED; }
+g5(){ if _tcp "$ATTIC" "$SSHP"; then echo up > "$ATTIC_STATE"; echo PASS
+  elif _attic_host_up; then echo up > "$ATTIC_STATE"
+    echo "  ↳ diagnosis: attic host answers but WSL sshd :$SSHP does not — the WSL distro did not start; check the Task Scheduler boot job (§4.1)." >&2
+    echo FAIL
+  else echo down > "$ATTIC_STATE"; echo DEGRADED; fi; }
 g6(){ # all soulmount units active inside WSL (brain + channels + metime timer)
   local out; out="$(ssh $SSHO -p "$SSHP" "$AUSER@$ATTIC" \
      'systemctl is-active soulmount-brain soulmount-channels soulmount-metime.timer' 2>/dev/null)"
   if [ "$(printf '%s' "$out" | grep -c '^active$')" = 3 ]; then echo PASS
-  elif _tcp "$ATTIC" "$SSHP"; then echo FAIL; else echo DEGRADED; fi; }
+  elif _attic_up; then echo FAIL; else echo DEGRADED; fi; }
 g7(){ # robot -> brain LAN path (proves mirrored networking / portproxy) — key gate
   if ssh $SSHO "$RUSER@$HOST" "curl -s -m5 -o /dev/null -w '%{http_code}' http://$ATTIC:$BPORT/health" 2>/dev/null | grep -q 200
   then echo PASS
-  elif _tcp "$ATTIC" "$SSHP"; then echo FAIL; else echo DEGRADED; fi; }
+  elif _attic_up; then echo FAIL; else echo DEGRADED; fi; }
 g8(){ # greeting: the app runs UNDER reachy-mini-daemon (assumed captured in its journal;
       # verify at wire-up). Accept the greeting line OR the quiet-hours suppression line —
       # a correct quiet-hours boot legitimately plays no greeting (SPEC §Phase 4 tests this).

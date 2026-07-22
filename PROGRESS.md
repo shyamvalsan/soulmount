@@ -100,3 +100,16 @@ Append-only. ~Every 30 min or per acceptance item: done / next / blockers / spen
   identifier values, several cheap hardenings. **56 brain + 12 body + 4 live pass.**
 - **Next:** round 5 — because round 4 was not clean, keep iterating.
 - **Spend so far:** ~$0.09.
+
+### 2026-07-23 04:30 EEST — review round 5 applied (a self-caught CRITICAL)
+- **Done:** 5th re-review caught that my round-4 verify_boot fix was BROKEN (ATTIC_UP set
+  in a command-sub subshell never propagated → g6/g7 could never FAIL). Rewrote so g6/g7
+  re-test attic reachability themselves (bounded nc-free _tcp). Also: identity clips
+  growable sections (SELF/letter), succession deliver-once by default (?inspect to peek),
+  egress hooks on all brain clients, leakcheck git-HISTORY scan (all commits verified
+  clean) + bare-username scan, body-app log redaction, setup-attic idempotency/active-
+  hours, smoke volume restore. **57 brain + 12 body + 4 live pass; leakcheck tree+history
+  clean.** Core (budget/auth/streaming/leak/identity) confirmed sound by all 3 reviewers.
+- **Next:** round 6 = final full-scope confirmation (round 5 had a Critical → verify no
+  regression in the fixes). Then converge.
+- **Spend so far:** ~$0.10.

@@ -157,9 +157,13 @@ class MeTime:
             # driven the brain asleep since we started (§7.1 every call is guarded).
             if self.ctx.guard.decide().asleep:
                 break
-            result = await self.ctx.provider.acomplete(
-                {"model": model, "messages": messages, "tools": tools, "tool_choice": "auto"}
-            )
+            # Per-call token bound so a single turn can't overshoot the leftover
+            # allowance / fair-month-share by much (mirrors the chat pre-flight clamp).
+            price = self.ctx.provider.completion_price_per_token(model)
+            payload = {"model": model, "messages": messages, "tools": tools, "tool_choice": "auto"}
+            if price > 0:
+                payload["max_tokens"] = max(256, int(max(0.0, allowance - spend) / price))
+            result = await self.ctx.provider.acomplete(payload)
             self.ctx.guard.record("metime", result.model or model, result.usage)
             spend += result.usage.cost_usd
             if letter_pending:  # the me-time model has now received the letter

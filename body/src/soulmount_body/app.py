@@ -161,11 +161,17 @@ class SoulmountApp(_Base):
                 await self._sleep_interruptible(cfg.retry_interval_s)
                 continue
             if was_down:
-                log.info("brain reachable again — refreshing identity/house")
+                # Re-assert the startup invariant: only resume when BOTH identity and
+                # house are obtained, else stay drooped (don't run on a stale/empty
+                # persona or default house rules after e.g. a key rotation).
                 refreshed = await brain.house()
-                if refreshed:
-                    house = HouseRules.from_dict(refreshed)
-                await voice.start(await brain.identity())
+                new_identity = await brain.identity()
+                if refreshed is None or new_identity is None:
+                    await self._sleep_interruptible(cfg.retry_interval_s)
+                    continue
+                log.info("brain reachable again — refreshed identity/house")
+                house = HouseRules.from_dict(refreshed)
+                await voice.start(new_identity)
                 if not quiet:
                     await robot.wake_up()
                 voice.resume()

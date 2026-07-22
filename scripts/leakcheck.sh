@@ -152,6 +152,24 @@ if [ "$HISTORY" = 1 ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; th
         fi
       done < "$TMP_TERMS"
     fi
+    # ...and the actual .env secret + identifier VALUES across history (covers the bare
+    # BRAIN_API_KEY / IP / username that the patterns miss). Redacted in output.
+    if [ "$HAVE_ENV" = 1 ]; then
+      while IFS='=' read -r k v; do
+        v="$(printf '%s' "$v" | tr -d "\"'" | tr -d '[:space:]')"
+        sv=""
+        case "$k" in
+          *KEY | *TOKEN | *SECRET | *PASSWORD) [ "${#v}" -ge 16 ] && sv="$v" ;;
+          SOULMOUNT_DATA_DIR | REACHY_IP | BRAIN_HOST | TELEGRAM_FAMILY_CHAT_ID | BUDGET_TZ)
+            [ "${#v}" -ge 7 ] && sv="$v" ;;
+        esac
+        case "$sv" in 127.0.0.1 | 0.0.0.0 | localhost | reachy-mini.local | UTC | "") continue ;; esac
+        if git grep -InHF -e "$sv" $revs -- 2>/dev/null | head -1 | grep -q .; then
+          echo -e "${RED}✗ LEAK: a .env value appears in git HISTORY (redacted).${NC}"
+          fail=1
+        fi
+      done < <(grep -vE '^\s*(#|$)' .env)
+    fi
   fi
 fi
 

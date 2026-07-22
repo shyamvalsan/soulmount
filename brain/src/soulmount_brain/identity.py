@@ -188,7 +188,8 @@ class IdentityCompiler:
         mem_parts = [
             section("Curated memory (MEMORY.md)", memory_md),
             section("Recent days", "\n\n".join(daily_blocks)),
-            section("Your interests (INTERESTS.md)", interests),
+            # INTERESTS is robot-authored and grows via me-time — clip it like SELF/letter.
+            section("Your interests (INTERESTS.md)", clip(interests, int(max_tokens * 0.2))),
         ]
         # Trim recent-days first if we're over budget (keep MEMORY + INTERESTS).
         # daily_blocks is newest-first (recent_daily_files sorts reverse=True), so pop

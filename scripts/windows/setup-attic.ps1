@@ -126,9 +126,12 @@ else {
 
   # The WSL IP changes each boot → a startup task refreshes the proxy target.
   Say "Registering portproxy-refresh task (WSL IP changes per boot)"
+  # netsh portproxy has no 'set' verb — refresh = delete + add (the setup idiom).
   $refresh = "wsl.exe -d $Distro --exec hostname -I | ForEach-Object { `$ip=`$_.Trim().Split(' ')[0]; " +
-             "netsh interface portproxy set v4tov4 listenport=$BrainPort connectaddress=`$ip connectport=$BrainPort; " +
-             "netsh interface portproxy set v4tov4 listenport=$SshPort connectaddress=`$ip connectport=$SshPort }"
+             "netsh interface portproxy delete v4tov4 listenport=$BrainPort listenaddress=0.0.0.0; " +
+             "netsh interface portproxy add v4tov4 listenport=$BrainPort listenaddress=0.0.0.0 connectport=$BrainPort connectaddress=`$ip; " +
+             "netsh interface portproxy delete v4tov4 listenport=$SshPort listenaddress=0.0.0.0; " +
+             "netsh interface portproxy add v4tov4 listenport=$SshPort listenaddress=0.0.0.0 connectport=$SshPort connectaddress=`$ip }"
   $ra = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -Command `"$refresh`""
   # Must run as the distro-owning user (NOT SYSTEM) — it invokes wsl.exe.
   Register-ScheduledTask -TaskName "soulmount-portproxy-refresh" -Action $ra `

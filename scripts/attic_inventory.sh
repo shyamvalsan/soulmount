@@ -9,7 +9,7 @@ source "$HERE/lib.sh"; load_env
 
 ATTIC="${BRAIN_HOST:?set BRAIN_HOST (attic reserved IP) — e.g. make attic-inventory BRAIN_HOST=192.168.x.y}"
 SSHP="${BRAIN_SSH_PORT:-2222}"
-USER_NAME="${REACHY_SSH_USER:-$USER}"
+USER_NAME="${BRAIN_SSH_USER:-$USER}"
 S="ssh -o ConnectTimeout=8 -p $SSHP $USER_NAME@$ATTIC"
 
 info "querying attic WSL at $USER_NAME@$ATTIC:$SSHP"

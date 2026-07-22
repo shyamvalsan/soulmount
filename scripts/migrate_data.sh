@@ -9,7 +9,7 @@ source "$HERE/lib.sh"; load_env
 SRC="${SOULMOUNT_DATA_DIR:?set SOULMOUNT_DATA_DIR}"
 ATTIC="${BRAIN_HOST:?set BRAIN_HOST (attic reserved IP)}"
 SSHP="${BRAIN_SSH_PORT:-2222}"
-USER_NAME="${REACHY_SSH_USER:-$USER}"
+USER_NAME="${BRAIN_SSH_USER:-$USER}"
 DEST="\$HOME/soulmount-data"   # WSL ext4, never under /mnt/c (§4.1)
 
 confirm "Migrate data dir $SRC -> $USER_NAME@$ATTIC:$DEST (WSL ext4)?" || { warn "aborted"; exit 0; }
