@@ -35,6 +35,8 @@ confirm "Open .leakcheck-terms now?" && "${EDITOR:-nano}" "$DEST/.leakcheck-term
 
 if [ ! -d "$DEST/.git" ]; then
   info "git init (local; no remote — adding one is your choice, never the default)"
-  ( cd "$DEST" && git init -q && git add -A && git -c user.name=soulmount -c user.email=soul@localhost commit -q -m "init soul from templates" )
+  ( cd "$DEST" && git init -q \
+    && git add soul inner memory .leakcheck-terms \
+    && git -c user.name=soulmount -c user.email=soul@localhost commit -q -m "init soul from templates" )
 fi
 ok "data dir ready. Run 'make leakcheck' to confirm no terms leak into the repo."

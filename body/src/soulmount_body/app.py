@@ -24,6 +24,9 @@ from .state import sleep_info
 from .voice import make_voice_backend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# httpx/httpcore INFO logs the full request URL (incl. any Bearer/token) — keep it quiet.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("soulmount.body")
 
 try:  # Only importable on the robot / SDK venv; tests target the other modules.
@@ -93,9 +96,12 @@ class SoulmountApp(_Base):
                     log.info("quiet hours at startup — waking silently, no greeting")
                 return house
             if not drooped:
-                await robot.droop()
+                # No motion sounds during quiet hours (guardrail 9) — droop silently.
+                from datetime import datetime
+                if not HouseRules().in_quiet_hours(datetime.now().astimezone()):
+                    await robot.droop()
                 drooped = True
-                log.warning("brain unreachable at startup — antenna droop + retry")
+                log.warning("brain unreachable at startup — droop + retry")
             await self._sleep_interruptible(cfg.retry_interval_s)
         return HouseRules()
 

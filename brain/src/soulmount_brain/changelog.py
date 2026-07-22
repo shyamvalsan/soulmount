@@ -71,6 +71,7 @@ class Changelog:
         and advance the baseline — so a concurrent reconcile can't see the new content
         against the old baseline and cry 'edited externally'."""
         with self._lock():
+            self.seed_baseline_if_missing()  # avoid a partial baseline → false "external" edits
             self.dd.write(self.dd.path(*relpath.split("/")), content)
             self._append_line(description)
             if relpath in TRACKED:
@@ -114,6 +115,7 @@ class Changelog:
         baseline. Prefer write_tracked() when you also control the write, so the
         write + baseline advance are atomic."""
         with self._lock():
+            self.seed_baseline_if_missing()  # avoid a partial baseline → false "external" edits
             self._append_line(description)
             if relpath in TRACKED:
                 baseline = self._load_baseline()

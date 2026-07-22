@@ -51,6 +51,9 @@ class BudgetGuard:
         self.settings = settings
         self.dd = datadir
         self._now = now_fn or (lambda: datetime.now(settings.timezone))
+        # Cache parsed ledger entries by month, keyed on file mtime, so decide()/health
+        # don't re-scan the whole ledger on every request (§7.1 /health < 100 ms).
+        self._entry_cache: dict[str, tuple[float, list]] = {}
 
     # ── Time helpers ──────────────────────────────────────────────────────────
     def now(self) -> datetime:
@@ -74,32 +77,39 @@ class BudgetGuard:
         last = calendar.monthrange(when.year, when.month)[1]
         return max(1, last - when.day + 1)  # includes today
 
-    # ── Ledger reads ──────────────────────────────────────────────────────────
-    def _iter_ledger(self, month_key: str):
+    # ── Ledger reads (mtime-cached; re-read only when the file changes) ──────────
+    def _entries(self, month_key: str) -> list[dict]:
         f = self.dd.ledger_file(month_key)
         if not f.exists():
-            return
+            return []
+        mtime = f.stat().st_mtime
+        cached = self._entry_cache.get(month_key)
+        if cached and cached[0] == mtime:  # unchanged since last scan (incl. cross-process)
+            return cached[1]
+        entries: list[dict] = []
         for line in f.read_text("utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
             try:
-                yield json.loads(line)
+                entries.append(json.loads(line))
             except json.JSONDecodeError:
                 continue  # tolerate a partially-written last line
+        self._entry_cache[month_key] = (mtime, entries)
+        return entries
 
     def spent_month(self, when: datetime | None = None) -> float:
         when = when or self.now()
-        return round(sum(float(e.get("usd") or 0.0) for e in self._iter_ledger(self._month_key(when))), 8)
+        return round(sum(float(e.get("usd") or 0.0) for e in self._entries(self._month_key(when))), 8)
 
     def spent_today(self, when: datetime | None = None) -> float:
         when = when or self.now()
         today = when.date().isoformat()
-        total = 0.0
-        for e in self._iter_ledger(self._month_key(when)):
-            ts = str(e.get("ts") or "")
-            if ts[:10] == today:
-                total += float(e.get("usd") or 0.0)
+        total = sum(
+            float(e.get("usd") or 0.0)
+            for e in self._entries(self._month_key(when))
+            if str(e.get("ts") or "")[:10] == today
+        )
         return round(total, 8)
 
     def remaining_today_usd(self, when: datetime | None = None) -> float:
@@ -153,11 +163,18 @@ class BudgetGuard:
 
     def mark_goodnight_used(self, when: datetime | None = None, reason: str = "daily") -> None:
         when = when or self.now()
-        self.dd.write(self._goodnight_path(), json.dumps({
-            "date": when.date().isoformat(),
-            "month": f"{when.year:04d}-{when.month:02d}",
-            "reason": reason,
-        }))
+        # Write ONLY the triggering reason's field (preserving the other), so a daily
+        # goodnight doesn't consume the monthly one — and vice versa.
+        raw = self.dd.read(self._goodnight_path())
+        try:
+            data = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            data = {}
+        if reason == "monthly":
+            data["month"] = f"{when.year:04d}-{when.month:02d}"
+        else:
+            data["date"] = when.date().isoformat()
+        self.dd.write(self._goodnight_path(), json.dumps(data))
 
     # ── Ledger writes ─────────────────────────────────────────────────────────
     def record(self, runner: str, model: str, usage: Usage, when: datetime | None = None) -> dict:
@@ -173,7 +190,9 @@ class BudgetGuard:
             "usd": round(usage.cost_usd, 8),
             "estimated": usage.estimated,
         }
-        self.dd.append(self.dd.ledger_file(self._month_key(when)), json.dumps(entry) + "\n")
+        month_key = self._month_key(when)
+        self.dd.append(self.dd.ledger_file(month_key), json.dumps(entry) + "\n")
+        self._entry_cache.pop(month_key, None)  # invalidate so the next read sees this spend
         return entry
 
     # ── Inner-life leftover allowance (§7.7) ──────────────────────────────────

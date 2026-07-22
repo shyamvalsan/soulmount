@@ -94,6 +94,24 @@ for pat in "${SECRET_PATTERNS[@]}"; do
   fi
 done
 
+# ── 3) The ACTUAL secret values from .env (covers any format the patterns miss,
+#        e.g. a bare-hex BRAIN_API_KEY or an arbitrary upstream key). Never printed. ──
+if [ "$HAVE_ENV" = 1 ]; then
+  while IFS='=' read -r k v; do
+    case "$k" in
+      *KEY | *TOKEN | *SECRET | *PASSWORD)
+        v="$(printf '%s' "$v" | tr -d "\"'" | tr -d '[:space:]')"
+        [ "${#v}" -ge 16 ] || continue  # skip empty / trivially-short values
+        if hits="$(grep -rInHF -- "$v" "${SCAN_FILES[@]}" 2>/dev/null)"; then
+          echo -e "${RED}✗ LEAK: a secret VALUE from .env appears in a committable file:${NC}"
+          echo "${hits//"$v"/***REDACTED-ENV-SECRET***}" | sed 's/^/    /'
+          fail=1
+        fi
+        ;;
+    esac
+  done < <(grep -vE '^\s*(#|$)' .env)
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo -e "${RED}━━ leakcheck FAILED — do not commit. Move content into \$SOULMOUNT_DATA_DIR. ━━${NC}"
   exit 1

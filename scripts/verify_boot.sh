@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # verify_boot.sh — THE Phase 4 acceptance gate (SPEC §Phase 4). Run from the laptop.
 # POLLS (re-evaluating every 5s) until all gates pass or a 180 s deadline, then prints
-# a PASS/FAIL table with per-gate timings. Read-only. Degrade-aware: with the attic PC
-# offline, core gates (1-4,7) can PASS while attic gates (5,6) report DEGRADED.
+# a PASS/FAIL table with per-gate timings. Read-only. Degrade-aware: core robot gates
+# (1-4) must PASS; the attic-dependent gates (5,6,7) report DEGRADED when the attic PC
+# is offline. Exit 0=full pass, 2=core pass + degraded, 1=a core gate failed.
 #
 #   ./verify_boot.sh            # gates 1-7
 #   ./verify_boot.sh --audio    # + assert the greeting log line (gate 8)
@@ -19,7 +20,7 @@ ATTIC="${BRAIN_HOST:-127.0.0.1}"
 BPORT="${BRAIN_PORT:-8100}"
 SSHP="${BRAIN_SSH_PORT:-2222}"
 AUSER="${BRAIN_SSH_USER:-$USER}"   # attic WSL account (distinct from the robot user)
-SSHO="-o BatchMode=yes -o ConnectTimeout=6"
+SSHO="-o BatchMode=yes -o ConnectTimeout=4"  # short so a degraded round can't overrun 180s much
 
 # Each gate prints PASS / FAIL / DEGRADED. FAIL = a core gate that should pass;
 # DEGRADED = an attic-dependent gate (tolerated when the attic is offline).
@@ -27,7 +28,7 @@ g1(){ getent hosts "$HOST" >/dev/null 2>&1 || python3 -c "import socket;socket.g
 g2(){ [ "$(curl -s -m5 -o /dev/null -w '%{http_code}' "$RBASE/docs")" = 200 ] && echo PASS || echo FAIL; }
 g3(){ [ "$(ssh $SSHO "$RUSER@$HOST" 'systemctl is-active reachy-mini-daemon' 2>/dev/null)" = active ] && echo PASS || echo FAIL; }
 g4(){ curl -s -m5 "$RBASE/api/apps/current-app-status" 2>/dev/null | grep -qi soulmount && echo PASS || echo FAIL; }
-g5(){ nc -z -w4 "$ATTIC" "$SSHP" 2>/dev/null && echo PASS || echo DEGRADED; }
+g5(){ nc -z -w3 "$ATTIC" "$SSHP" 2>/dev/null && echo PASS || echo DEGRADED; }
 g6(){ # all soulmount units active inside WSL (brain + channels + metime timer)
   local out; out="$(ssh $SSHO -p "$SSHP" "$AUSER@$ATTIC" \
      'systemctl is-active soulmount-brain soulmount-channels soulmount-metime.timer' 2>/dev/null)"

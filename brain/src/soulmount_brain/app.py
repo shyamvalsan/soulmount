@@ -15,9 +15,10 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import __version__
+from .budget import GOODNIGHT_MAX_TOKENS
 from .config import get_settings
 from .context import BrainContext, build_context
-from .logging_utils import get_logger
+from .logging_utils import get_logger, redact_root_logging
 from .provider import ProviderError
 from .queues import enqueue_telegram_dm, store_relay
 from .schemas import (
@@ -35,6 +36,7 @@ log = get_logger("soulmount.brain")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    redact_root_logging()  # ensure uvicorn/httpx logs are redacted + URL-token-quiet
     settings = get_settings()
     app.state.ctx = build_context(settings)
     log.info("brain up: provider=%s model=%s", settings.brain_provider, settings.brain_model)
@@ -92,12 +94,13 @@ async def health(request: Request):
 
 
 @app.get("/v1/identity", dependencies=[Depends(require_auth)])
-async def identity(request: Request, slim: bool = False):
+async def identity(request: Request, slim: bool = False, deliver: bool = False):
     c = ctx(request)
     result = await _compile_identity(c, slim=slim)
-    # The body app fetches /v1/identity at session start and injects it — that is the
-    # delivery, so consume a pending succession letter here (§7.5, delivered once).
-    if result.included_letter:
+    # Consume a pending succession letter ONLY when the caller declares real delivery
+    # (?deliver=true — the body app's session-start fetch). A plain inspection GET or a
+    # monitor probe must not burn the one-shot letter (§7.5, delivered once).
+    if deliver and result.included_letter:
         c.identity.mark_letter_delivered(result.included_letter)
     return {"instructions": result.text, "soul_version": result.soul_version}
 
@@ -144,6 +147,16 @@ async def chat_completions(request: Request):
         result = await _compile_identity(c)
         injected_letter = result.included_letter
         body["messages"] = [{"role": "system", "content": result.text}, *messages]
+
+    # Pre-flight bound: cap max_tokens so a single turn's completion can't cost more
+    # than the remaining budget (keeps "hard means hard" close to true even when the
+    # caller requests a huge max_tokens near the cap). Prompt cost is already committed.
+    price = c.provider.completion_price_per_token(body["model"])
+    if price > 0:
+        remaining = max(0.0, min(decision.remaining_today_usd, decision.remaining_month_usd))
+        affordable = max(GOODNIGHT_MAX_TOKENS, int(remaining / price))  # always allow a short turn
+        existing = body.get("max_tokens")
+        body["max_tokens"] = min(existing, affordable) if existing else affordable
 
     # Goodnight: force a short, graceful final turn.
     if decision.state == "goodnight" and decision.max_tokens_hint:

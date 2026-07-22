@@ -30,6 +30,20 @@ class _RedactingFilter(logging.Filter):
         return True
 
 
+def redact_root_logging() -> None:
+    """Belt-and-suspenders for entry points that may configure root logging: quiet the
+    httpx/httpcore loggers (their INFO lines log the full request URL, incl. the Telegram
+    bot token) and attach the redactor to the root logger + its handlers."""
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    root = logging.getLogger()
+    if not any(isinstance(f, _RedactingFilter) for f in root.filters):
+        root.addFilter(_RedactingFilter())
+    for h in root.handlers:
+        if not any(isinstance(f, _RedactingFilter) for f in h.filters):
+            h.addFilter(_RedactingFilter())
+
+
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:

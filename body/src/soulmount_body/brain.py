@@ -32,7 +32,10 @@ class BrainConnection:
     async def health(self) -> dict | None:
         try:
             r = await self._c().get(f"{self.base}/health", timeout=5.0)
-            return r.json() if r.status_code == 200 else None
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            return data if isinstance(data, dict) else None
         except (httpx.HTTPError, ValueError):
             return None
 
@@ -42,15 +45,25 @@ class BrainConnection:
 
     async def identity(self, slim: bool = False) -> str | None:
         try:
-            r = await self._c().get(f"{self.base}/v1/identity", params={"slim": slim}, headers=self.auth)
-            return r.json().get("instructions") if r.status_code == 200 else None
+            # deliver=true: this session-start fetch IS the delivery, so a pending
+            # succession letter is consumed (a plain inspection GET would not).
+            r = await self._c().get(
+                f"{self.base}/v1/identity", params={"slim": slim, "deliver": True}, headers=self.auth
+            )
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            return data.get("instructions") if isinstance(data, dict) else None
         except (httpx.HTTPError, ValueError):
             return None
 
     async def house(self) -> dict | None:
         try:
             r = await self._c().get(f"{self.base}/v1/house", headers=self.auth)
-            return r.json() if r.status_code == 200 else None
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            return data if isinstance(data, dict) else None
         except (httpx.HTTPError, ValueError):
             return None
 

@@ -119,8 +119,8 @@ robot-restart: ## Stop the running app (one-app rule) and start soulmount via RE
 .PHONY: brain-install verify-boot attic-inventory
 brain-install: ## Install systemd units for brain/channels/metime inside WSL (needs BRAIN_HOST)
 	@bash scripts/brain_install.sh
-verify-boot: ## THE acceptance gate — PASS/FAIL table with timings
-	@bash scripts/verify_boot.sh
+verify-boot: ## THE acceptance gate — PASS/FAIL table with timings (exit 2=degraded is OK)
+	@bash scripts/verify_boot.sh || { ec=$$?; [ $$ec -eq 2 ] && exit 0 || exit $$ec; }
 attic-inventory: ## Read-only inventory of the attic WSL host (needs BRAIN_HOST + ssh)
 	@bash scripts/attic_inventory.sh
 

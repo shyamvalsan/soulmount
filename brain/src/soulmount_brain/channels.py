@@ -19,7 +19,7 @@ import httpx
 
 from .config import Settings, get_settings
 from .context import BrainContext, build_context
-from .logging_utils import get_logger
+from .logging_utils import get_logger, redact_root_logging
 
 log = get_logger("soulmount.channels")
 
@@ -141,6 +141,15 @@ class ChannelsWorker:
         if not self.is_allowed(int(user_id)):
             self._count_dropped(int(user_id))
             log.warning("dropped message from non-allowlisted user %s", user_id)
+            return
+
+        # Chat-scope gate (guardrail 7 / HOUSE "reserved mode"): only reply in a private
+        # DM or the configured family chat — never in some other group the bot was added
+        # to, even to an allowlisted member, since the reply carries household identity.
+        fam = self.s.telegram_family_chat_id
+        is_family = bool(fam) and str(chat_id) == str(fam)
+        if (chat.get("type") != "private") and not is_family:
+            log.warning("ignoring message in non-family chat %s (type=%s)", chat_id, chat.get("type"))
             return
 
         source = self.source_for(int(chat_id), int(user_id))
@@ -282,6 +291,7 @@ class ChannelsWorker:
 
 
 async def _amain(dry_run: bool) -> None:
+    redact_root_logging()  # the bot token rides in the request URL — keep it out of logs
     settings = get_settings()
     if not settings.telegram_bot_token:
         # Overnight-safe: no token → nothing to poll (§2.1.6). See MORNING.md.

@@ -54,8 +54,9 @@ def _worker(data_dir, brain_response, **over):
     return ChannelsWorker(ctx, tg, brain, dry_run=True), tg, brain, ctx
 
 
-def _msg(uid, chat, text, update_id=1):
-    return {"update_id": update_id, "message": {"text": text, "from": {"id": uid}, "chat": {"id": chat}}}
+def _msg(uid, chat, text, update_id=1, ctype="private"):
+    return {"update_id": update_id,
+            "message": {"text": text, "from": {"id": uid}, "chat": {"id": chat, "type": ctype}}}
 
 
 async def test_non_allowlisted_dropped_and_counted(data_dir):
@@ -65,6 +66,21 @@ async def test_non_allowlisted_dropped_and_counted(data_dir):
     assert brain.calls == []        # never reaches the brain
     dropped = json.loads((data_dir / "ops" / "state" / "dropped.json").read_text())
     assert dropped["999"] == 1
+    await ctx.aclose()
+
+
+async def test_ignores_non_family_group_even_from_allowlisted_user(data_dir):
+    w, tg, brain, ctx = _worker(data_dir, {"choices": [{"message": {"content": "x"}}]})
+    # Allowlisted user 111, but in some OTHER group (not the family chat).
+    await w.handle_update(_msg(111, -100777, "hi bot", ctype="supergroup"))
+    assert tg.sent == [] and brain.calls == []  # no household context in front of strangers
+    await ctx.aclose()
+
+
+async def test_answers_in_family_group(data_dir):
+    w, tg, brain, ctx = _worker(data_dir, {"choices": [{"message": {"content": "ok"}}]})
+    await w.handle_update(_msg(111, -1009999, "hi", ctype="supergroup"))
+    assert tg.sent == [(-1009999, "ok")]
     await ctx.aclose()
 
 

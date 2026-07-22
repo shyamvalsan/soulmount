@@ -67,6 +67,11 @@ done overnight because §2.1 / quiet hours / the attic being offline forbade it.
 - [ ] **Mechanical anti-triangulation** (§7.4/§8): currently source-tagged in memory +
       charter-enforced; not mechanically blocked in the send path. Decide the
       enforcement model (per-fact source tags + a send-path check) before Phase 5 live.
+- [ ] **Over-cap proactive → journal (guardrail 12 gray area):** when a proactive DM
+      hits the weekly cap, the robot's own message is filed into `inner/journal/` with a
+      code-added "(unsent — cap reached)" prefix. SPEC §8 says "the thought goes to the
+      journal"; but the *code* frames+files it. Keep (preserves the thought) or divert to
+      `ops/` instead. Your call. (channels.py `_send_outbox_entry`.)
 - [ ] **Egress allowlist backstop** (§9.6 "enforce in code"): today compliant by
       construction (verified: only model-provider/telegram/search/daemon hosts are
       called; the search tool takes a query, not a URL, so no SSRF). Decide whether to

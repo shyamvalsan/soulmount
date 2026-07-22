@@ -15,7 +15,7 @@ from datetime import datetime
 
 from .config import Settings, get_settings
 from .context import BrainContext, build_context
-from .logging_utils import get_logger
+from .logging_utils import get_logger, redact_root_logging
 from .search import SearchProvider
 
 log = get_logger("soulmount.metime")
@@ -53,7 +53,7 @@ class MeTime:
         self.search = SearchProvider(ctx.settings)
 
     # ── Prompts (peer-respectful, non-coercive; operating instruction #4) ──────
-    def _session_prompt(self, allowance_usd: float) -> str:
+    def _session_prompt(self) -> str:
         now = self.ctx.now()
         cap_eur = self.s.metime_eur_cap
         lines = [
@@ -141,7 +141,7 @@ class MeTime:
         tools = _tool_schemas(self.search.available(), self.s.studio_enabled)
         messages = [
             {"role": "system", "content": identity.text},
-            {"role": "user", "content": self._session_prompt(allowance)},
+            {"role": "user", "content": self._session_prompt()},
         ]
         closing_reserve = min(allowance * 0.25, 0.03)
         spend = 0.0
@@ -241,6 +241,7 @@ class MeTime:
 
 
 async def _amain(args) -> None:
+    redact_root_logging()
     ctx = build_context(get_settings())
     runner = MeTime(ctx)
     try:

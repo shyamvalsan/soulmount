@@ -169,6 +169,12 @@ class UpstreamProvider:
             8,
         )
 
+    def completion_price_per_token(self, model: str) -> float:
+        """USD per completion token (price table, high fallback if unknown). Used for a
+        conservative pre-flight max_tokens bound so a turn can't blow past the cap."""
+        row = self._prices.get(model) or _UNKNOWN_PRICE
+        return row.get("completion", 0.0) / 1_000_000
+
     def _estimate_usage(self, model: str, prompt_tokens: int, completion_tokens: int) -> Usage:
         return Usage(
             prompt_tokens=prompt_tokens,

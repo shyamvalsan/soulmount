@@ -62,6 +62,14 @@ Ok "boot task '$taskName' registered as '$TaskUser' (S4U)"
 
 # ── 2. Networking ────────────────────────────────────────────────────────────
 if ($Mode -eq "mirrored") {
+  # Capability check FIRST, before touching .wslconfig — so we never leave a half-applied
+  # config on a build that can't do mirrored (needs Win11 22H2+ / build 22621 and the
+  # Hyper-V firewall cmdlets). attic_inventory.sh recommends portproxy for older builds.
+  $build = [int](Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuildNumber
+  if ($build -lt 22621 -or -not (Get-Command New-NetFirewallHyperVRule -ErrorAction SilentlyContinue)) {
+    throw "Mirrored networking needs Windows 11 22H2+ (build 22621) and the Hyper-V firewall cmdlets; " +
+          "this host is build $build. Re-run with:  ./setup-attic.ps1 -Mode portproxy"
+  }
   Say "Mirrored networking: merging networkingMode into %UserProfile%\.wslconfig"
   $wslconfig = Join-Path $env:USERPROFILE ".wslconfig"
   # MERGE (don't clobber) — preserve any existing [wsl2] tuning (memory/processors/…).
