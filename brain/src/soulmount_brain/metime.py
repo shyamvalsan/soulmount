@@ -183,7 +183,6 @@ class MeTime:
             except Exception as e:
                 log.warning("closing turn failed: %s", e)
 
-        await self.search.aclose()
         self._ops_log(f"session: spend=${spend:.4f} allowance=${allowance:.4f} tool_calls={calls} limited={limited}")
         log.info("me-time done: spend=$%.4f calls=%d", spend, calls)
         return {"skipped": False, "spend_usd": round(spend, 6), "tool_calls": calls, "limited": limited}
@@ -240,6 +239,7 @@ async def _amain(args) -> None:
         else:
             print(json.dumps(await runner.run_session()))
     finally:
+        await runner.search.aclose()
         await ctx.aclose()
 
 

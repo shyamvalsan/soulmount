@@ -18,6 +18,7 @@ class BrainConnection:
         self.auth = auth_header
         self._client = client
         self._owns = client is None
+        self._bg_tasks: set = set()  # retain fire-and-forget tasks so they aren't GC'd
 
     def _c(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -63,8 +64,21 @@ class BrainConnection:
         return r.json()
 
     def sync_turn_bg(self, source: str, user_text: str, assistant_text: str) -> None:
-        """Fire-and-forget sync so the voice loop never blocks (Phase 3 item 1)."""
-        asyncio.ensure_future(self._sync_turn(source, user_text, assistant_text))
+        """Fire-and-forget sync so the voice loop never blocks (Phase 3 item 1).
+
+        Must be called from within a running event loop. The task reference is
+        retained until completion so it can't be garbage-collected mid-flight.
+        """
+        try:
+            task = asyncio.get_running_loop().create_task(
+                self._sync_turn(source, user_text, assistant_text)
+            )
+        except RuntimeError:
+            # No running loop (called from a sync context) — run it to completion.
+            asyncio.run(self._sync_turn(source, user_text, assistant_text))
+            return
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     async def _sync_turn(self, source: str, user_text: str, assistant_text: str) -> None:
         try:

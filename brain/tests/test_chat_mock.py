@@ -76,6 +76,16 @@ def test_stream_relays_and_records_cost(client, data_dir):
 
 
 @respx.mock
+def test_stream_upstream_error_is_502_not_truncated_200(client):
+    respx.post(URL).mock(return_value=httpx.Response(429, text="rate limited"))
+    r = client.post("/v1/chat/completions",
+                    json={"stream": True, "messages": [{"role": "user", "content": "hi"}]},
+                    headers=AUTH)
+    # The error is detected before the stream starts → a real 502, not a 200 empty body.
+    assert r.status_code == 502
+
+
+@respx.mock
 def test_asleep_returns_payload_without_upstream(make_client):
     route = respx.post(URL).mock(return_value=httpx.Response(200, json=_completion()))
     with make_client(BUDGET_DAILY_USD="0") as c:  # forced cap → asleep immediately

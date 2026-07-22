@@ -7,6 +7,7 @@ All personal file I/O resolves through $SOULMOUNT_DATA_DIR.
 
 from __future__ import annotations
 
+import hmac
 import time
 from contextlib import asynccontextmanager
 
@@ -55,7 +56,8 @@ def require_auth(request: Request) -> None:
     if not settings.brain_api_key:
         # Fail closed: never serve /v1 wide open.
         raise HTTPException(503, "brain not configured: BRAIN_API_KEY unset")
-    if request.headers.get("authorization", "") != f"Bearer {settings.brain_api_key}":
+    provided = request.headers.get("authorization", "")
+    if not hmac.compare_digest(provided, f"Bearer {settings.brain_api_key}"):
         raise HTTPException(401, "invalid or missing bearer token")
 
 
@@ -93,6 +95,10 @@ async def health(request: Request):
 async def identity(request: Request, slim: bool = False):
     c = ctx(request)
     result = await _compile_identity(c, slim=slim)
+    # The body app fetches /v1/identity at session start and injects it — that is the
+    # delivery, so consume a pending succession letter here (§7.5, delivered once).
+    if result.included_letter:
+        c.identity.mark_letter_delivered(result.included_letter)
     return {"instructions": result.text, "soul_version": result.soul_version}
 
 
@@ -133,8 +139,10 @@ async def chat_completions(request: Request):
     body.setdefault("model", c.settings.brain_model)
     # Inject identity as system prompt when the caller sends none (§7.1).
     messages = body.get("messages") or []
+    injected_letter: str | None = None
     if not any((m or {}).get("role") == "system" for m in messages):
         result = await _compile_identity(c)
+        injected_letter = result.included_letter
         body["messages"] = [{"role": "system", "content": result.text}, *messages]
 
     # Goodnight: force a short, graceful final turn.
@@ -148,12 +156,26 @@ async def chat_completions(request: Request):
 
     if stream:
         session = c.provider.stream(body)
+        # Open the upstream stream now so a 4xx/5xx becomes a real error status here,
+        # not a truncated HTTP 200 (the body app can react to a 502).
+        try:
+            await session.start()
+        except ProviderError as e:
+            raise HTTPException(502, f"upstream error: {e}")
+        # The model has now accepted the turn: consume the letter / mark goodnight used.
+        if injected_letter:
+            c.identity.mark_letter_delivered(injected_letter)
+        if decision.state == "goodnight":
+            c.guard.mark_goodnight_used()
 
         async def gen():
             try:
                 async for chunk in session.iter_sse():
                     yield chunk
             finally:
+                # finalize() guarantees a (possibly estimated) cost even on a
+                # mid-stream disconnect, so the hard cap is never under-counted.
+                session.finalize()
                 c.guard.record("conversation", session.model, session.usage)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
@@ -163,6 +185,10 @@ async def chat_completions(request: Request):
     except ProviderError as e:
         raise HTTPException(502, f"upstream error: {e}")
     c.guard.record("conversation", result.model, result.usage)
+    if injected_letter:
+        c.identity.mark_letter_delivered(injected_letter)
+    if decision.state == "goodnight":
+        c.guard.mark_goodnight_used()
     return JSONResponse(result.raw or {
         "id": result.id,
         "model": result.model,

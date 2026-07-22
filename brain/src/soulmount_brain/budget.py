@@ -125,11 +125,31 @@ class BudgetGuard:
                                   rem_day, rem_month, None)
 
         if effective <= reserve:
-            # Into the reserve — permit one final short completion, then sleep.
+            # Into the reserve — permit ONE final short completion, then sleep.
             reason = "monthly" if rem_month <= reserve else "daily"
+            wake = self._first_of_next_month(when) if reason == "monthly" else self._next_midnight(when)
+            if self._goodnight_used(when):
+                return BudgetDecision("asleep", reason, wake, rem_day, rem_month, None)
             return BudgetDecision("goodnight", reason, None, rem_day, rem_month, GOODNIGHT_MAX_TOKENS)
 
         return BudgetDecision("awake", None, None, rem_day, rem_month, None)
+
+    # Goodnight is granted at most once per day (SPEC §7.7: "one final short completion").
+    def _goodnight_path(self):
+        return self.dd.path("ops", "state", "goodnight.json")
+
+    def _goodnight_used(self, when: datetime) -> bool:
+        raw = self.dd.read(self._goodnight_path())
+        if not raw:
+            return False
+        try:
+            return json.loads(raw).get("date") == when.date().isoformat()
+        except json.JSONDecodeError:
+            return False
+
+    def mark_goodnight_used(self, when: datetime | None = None) -> None:
+        when = when or self.now()
+        self.dd.write(self._goodnight_path(), json.dumps({"date": when.date().isoformat()}))
 
     # ── Ledger writes ─────────────────────────────────────────────────────────
     def record(self, runner: str, model: str, usage: Usage, when: datetime | None = None) -> dict:

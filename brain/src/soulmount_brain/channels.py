@@ -195,30 +195,47 @@ class ChannelsWorker:
             try:
                 entry = json.loads(f.read_text("utf-8"))
             except (OSError, json.JSONDecodeError):
+                f.unlink(missing_ok=True)  # unparseable → drop, don't spin on it
                 continue
-            await self._send_outbox_entry(entry)
-            f.unlink(missing_ok=True)
+            try:
+                remove = await self._send_outbox_entry(entry)
+            except Exception as e:
+                # A failed send must not kill the worker; keep the file for retry.
+                log.warning("outbox send failed (%s); will retry: %s", f.name, e)
+                remove = False
+            if remove:
+                f.unlink(missing_ok=True)
 
-    async def _send_outbox_entry(self, entry: dict) -> None:
+    async def _send_outbox_entry(self, entry: dict) -> bool:
+        """Returns True if the queue file should be removed (sent, diverted, or
+        undeliverable); False to keep it for a later retry."""
         person = entry.get("person")
         text = entry.get("text", "")
         chat_id = self._chat_id_for_person(person)
         if chat_id is None:
             log.warning("no chat id for person %r; dropping queued message", person)
-            return
+            return True  # can't route → drop rather than retry forever
 
         if entry.get("kind") == "proactive":
-            # Enforce the weekly cap in code; over cap → the thought goes to the journal.
+            # No proactive anything during quiet hours (§7.4 / guardrail 9) — defer.
+            if self.ctx.house().in_quiet_hours(self.ctx.now()):
+                log.info("quiet hours — deferring proactive to %s", person)
+                return False
+            # Weekly cap enforced in code; over cap → the thought goes to the journal.
             if not self._proactive_allowed(person):
                 self.ctx.inner.journal(
                     f"(unsent — weekly proactive cap reached for {person})\n{text}"
                 )
                 log.info("proactive cap reached for %s; diverted to journal", person)
-                return
+                return True  # consumed (diverted)
+
+        # Send first; only count a proactive against the cap AFTER it actually sent,
+        # so a transient failure + retry never double-consumes a weekly slot.
+        await self.tg.send_message(chat_id, text)
+        if entry.get("kind") == "proactive":
             self._record_proactive(person)
             log.info("proactive send to %s motivated_by=%s", person, entry.get("motivated_by"))
-
-        await self.tg.send_message(chat_id, text)
+        return True
 
     def _chat_id_for_person(self, person: str | None) -> int | None:
         """person is a numeric user id string (from say_privately) or 'family'."""
@@ -246,7 +263,10 @@ class ChannelsWorker:
         offset = 0
         log.info("channels worker up (dry_run=%s)", self.dry_run)
         while True:
-            await self.drain_outbox()
+            try:
+                await self.drain_outbox()
+            except Exception as e:  # never let the outbox take the worker down
+                log.warning("drain_outbox error: %s", e)
             try:
                 updates = await self.tg.get_updates(offset)
             except httpx.HTTPError as e:

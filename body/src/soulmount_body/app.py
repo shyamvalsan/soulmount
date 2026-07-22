@@ -87,6 +87,7 @@ class SoulmountApp(_Base):
                     if vol is not None:
                         await robot.set_volume(house.clamp_volume(vol))
                     await voice.speak(cfg.greeting)
+                    log.info("greeting played")
                 else:
                     log.info("quiet hours at startup — waking silently, no greeting")
                 return house
@@ -104,17 +105,23 @@ class SoulmountApp(_Base):
         while not self._stopping():
             health = await brain.health()
             asleep, wake_at = sleep_info(health)
+            quiet = house.in_quiet_hours(datetime.now().astimezone())
 
             if asleep and not was_asleep:
-                # Zero-token goodnight: wind-down emotion + sleep pose, pause listening.
+                # Zero-token goodnight. The wind-down emotion can make motion sounds,
+                # so during quiet hours we take the sleep pose silently (guardrail 9).
                 log.info("brain asleep until %s — goodnight pose, pausing", wake_at)
-                await robot.play_emotion("sleep1")
+                if not quiet:
+                    await robot.play_emotion("sleep1")
                 await robot.sleep_pose()
                 voice.pause()
                 was_asleep = True
             elif not asleep and was_asleep:
-                log.info("brain awake again — stretching")
-                await robot.wake_up()
+                # A daily-cap wake is at local midnight — inside quiet hours — so the
+                # visible stretch is suppressed; we just resume listening silently.
+                log.info("brain awake again%s", "" if quiet else " — stretching")
+                if not quiet:
+                    await robot.wake_up()
                 voice.resume()
                 was_asleep = False
 

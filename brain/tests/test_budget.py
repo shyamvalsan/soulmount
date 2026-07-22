@@ -51,6 +51,16 @@ def test_awake_then_goodnight_then_asleep(tmp_path):
     assert d.wake_at == datetime(2026, 7, 16, 0, 0, tzinfo=UTC)  # next local midnight
 
 
+def test_goodnight_granted_only_once(tmp_path):
+    clock = {"t": datetime(2026, 7, 15, 20, 0, tzinfo=UTC)}
+    g = _guard(tmp_path, clock, daily=0.10)
+    g.record("conversation", "m", _usd(0.06))       # remaining 0.04 <= reserve 0.05
+    assert g.decide().state == "goodnight"
+    g.mark_goodnight_used()                          # the one final turn is spent
+    d = g.decide()
+    assert d.state == "asleep" and d.reason == "daily"  # no more goodnights this day
+
+
 def test_ledger_totals(tmp_path):
     clock = {"t": datetime(2026, 7, 15, 9, 0, tzinfo=UTC)}
     g = _guard(tmp_path, clock)

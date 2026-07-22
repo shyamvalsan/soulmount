@@ -40,6 +40,7 @@ class IdentityResult:
     text: str
     soul_version: str
     est_tokens: int
+    included_letter: str | None = None  # a pending succession letter was included
 
 
 class IdentityCompiler:
@@ -72,7 +73,9 @@ class IdentityCompiler:
         except json.JSONDecodeError:
             return set()
 
-    def _mark_delivered(self, name: str) -> None:
+    def mark_letter_delivered(self, name: str) -> None:
+        """Consume a one-shot succession letter — called only when the identity is
+        actually delivered to a model (not on inspection or a failed turn)."""
         delivered = self._delivered_letters()
         delivered.add(name)
         self.dd.write(self._succession_state_path(), json.dumps({"delivered": sorted(delivered)}))
@@ -183,6 +186,14 @@ class IdentityCompiler:
             daily_blocks.pop(0)  # drop the oldest day
             mem_parts[1] = section("Recent days", "\n\n".join(daily_blocks))
             mem_text = "".join(p for p in mem_parts if p)
+        # If still over after dropping every daily file, truncate MEMORY.md so the
+        # compiled identity stays bounded by IDENTITY_MAX_TOKENS (keep INTERESTS whole).
+        if est_tokens("".join(p for p in mem_parts if p)) > budget_left and memory_md:
+            room_tokens = max(0, budget_left - est_tokens(mem_parts[1]) - est_tokens(mem_parts[2]))
+            truncated = memory_md[: room_tokens * 4]
+            if truncated and truncated != memory_md:
+                truncated = truncated.rstrip() + "\n\n…(memory truncated to fit the identity budget)…"
+            mem_parts[0] = section("Curated memory (MEMORY.md)", truncated)
         parts.extend(mem_parts)
 
         # Section 7 — changelog tail (so edits are seen).
@@ -191,8 +202,12 @@ class IdentityCompiler:
 
         text = "".join(p for p in parts if p).strip() + "\n"
 
-        # Mark the letter delivered only after a successful compile.
-        if letter is not None:
-            self._mark_delivered(letter[0])
-
-        return IdentityResult(text=text, soul_version=self.soul_version(), est_tokens=est_tokens(text))
+        # NB: we do NOT consume the letter here. Compilation happens on inspection
+        # (/v1/identity), on failed turns, and in me-time; the letter is marked
+        # delivered by the caller only when it actually reaches a model (§7.5).
+        return IdentityResult(
+            text=text,
+            soul_version=self.soul_version(),
+            est_tokens=est_tokens(text),
+            included_letter=(letter[0] if letter is not None else None),
+        )

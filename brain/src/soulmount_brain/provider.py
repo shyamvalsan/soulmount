@@ -162,6 +162,15 @@ class UpstreamProvider:
             8,
         )
 
+    def _estimate_usage(self, model: str, prompt_tokens: int, completion_tokens: int) -> Usage:
+        return Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            cost_usd=self._estimate_cost(model, prompt_tokens, completion_tokens),
+            estimated=True,
+        )
+
     # ── Non-streaming completion ──────────────────────────────────────────────
     async def acomplete(self, payload: dict) -> ChatResult:
         body = dict(payload)
@@ -192,10 +201,13 @@ class UpstreamProvider:
 
 
 class StreamSession:
-    """Forwards upstream SSE verbatim to the client while capturing final usage/cost.
+    """Forwards upstream SSE verbatim while capturing usage/cost.
 
-    Iterate ``iter_sse()`` to relay bytes; after it finishes, ``usage`` holds the
-    parsed cost for the ledger.
+    Call ``start()`` first — it opens the upstream stream and raises ProviderError on
+    a 4xx/5xx BEFORE any bytes are relayed, so the caller can return a real error
+    status instead of a truncated 200. Then iterate ``iter_sse()``. Always call
+    ``finalize()`` afterwards (even on disconnect) so ``usage`` carries a cost for
+    the ledger — the budget cap depends on never under-counting (§7.7).
     """
 
     def __init__(self, provider: UpstreamProvider, body: dict):
@@ -204,29 +216,50 @@ class StreamSession:
         self.model = body.get("model", "")
         self.usage = Usage()
         self._saw_usage = False
+        self._content_chars = 0
+        self._cm = None
+        self._resp: httpx.Response | None = None
 
-    async def iter_sse(self) -> AsyncIterator[bytes]:
+    async def start(self) -> None:
         client = self.provider._client_or_new()
         url = f"{self.provider.base_url}/chat/completions"
+        self._cm = client.stream("POST", url, headers=self.provider.headers, json=self.body)
         try:
-            async with client.stream(
-                "POST", url, headers=self.provider.headers, json=self.body
-            ) as resp:
-                if resp.status_code >= 400:
-                    err = await resp.aread()
-                    raise ProviderError(f"upstream {resp.status_code}: {err[:500]!r}")
-                async for line in resp.aiter_lines():
-                    self._inspect_line(line)
-                    # Re-emit as proper SSE framing (aiter_lines strips newlines).
-                    if line == "":
-                        yield b"\n"
-                    else:
-                        yield (line + "\n").encode("utf-8")
+            self._resp = await self._cm.__aenter__()
         except httpx.HTTPError as e:
+            self._cm = None
             raise ProviderError(f"upstream stream failed: {e}") from e
-        # If the provider never emitted a usage chunk, estimate from what we have.
+        if self._resp.status_code >= 400:
+            err = await self._resp.aread()
+            await self._cm.__aexit__(None, None, None)
+            self._cm = None
+            raise ProviderError(f"upstream {self._resp.status_code}: {err[:500]!r}")
+
+    async def iter_sse(self) -> AsyncIterator[bytes]:
+        if self._resp is None:
+            await self.start()
+        try:
+            async for line in self._resp.aiter_lines():  # type: ignore[union-attr]
+                self._inspect_line(line)
+                yield b"\n" if line == "" else (line + "\n").encode("utf-8")
+        except httpx.HTTPError as e:
+            raise ProviderError(f"upstream stream failed mid-body: {e}") from e
+        finally:
+            if self._cm is not None:
+                await self._cm.__aexit__(None, None, None)
+                self._cm = None
+
+    def finalize(self) -> None:
+        """Ensure a cost is recorded even if the stream was cut off before the usage
+        chunk (barge-in / client disconnect). Estimate conservatively from the request
+        prompt and the content streamed so far, so the cap is never under-counted."""
         if not self._saw_usage:
-            self.usage = self.provider._usage_from_payload(self.model, None)
+            prompt_chars = sum(
+                len(str((m or {}).get("content") or "")) for m in self.body.get("messages", [])
+            )
+            self.usage = self.provider._estimate_usage(
+                self.model, prompt_chars // 4, self._content_chars // 4
+            )
 
     def _inspect_line(self, line: str) -> None:
         # SSE comment/keepalive lines start with ':' (e.g. ': OPENROUTER PROCESSING').
@@ -239,6 +272,10 @@ class StreamSession:
             obj = json.loads(data)
         except json.JSONDecodeError:
             return
+        for ch in obj.get("choices") or []:
+            content = (ch.get("delta") or {}).get("content")
+            if content:
+                self._content_chars += len(content)
         if obj.get("usage"):
             self.usage = self.provider._usage_from_payload(
                 obj.get("model") or self.model, obj["usage"]

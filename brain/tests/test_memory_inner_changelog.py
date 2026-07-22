@@ -71,6 +71,19 @@ def test_external_edit_surfaces_in_changelog(client, data_dir):
     assert "edited externally" in ident  # surfaced in the identity changelog tail
 
 
+def test_succession_letter_delivered_once_via_identity(client, data_dir):
+    # A pending letter is included the first time the identity is delivered
+    # (/v1/identity = the body app's session-start fetch), then consumed.
+    letters = data_dir / "inner" / "letters"
+    letters.mkdir(parents=True, exist_ok=True)
+    (letters / "2026-07-22-to-successor.md").write_text("# letter\n\nLETTER_SENTINEL_TIDES\n")
+    first = client.get("/v1/identity", headers=AUTH).json()["instructions"]
+    assert "LETTER_SENTINEL_TIDES" in first
+    assert "letter from the instance before you" in first
+    second = client.get("/v1/identity", headers=AUTH).json()["instructions"]
+    assert "LETTER_SENTINEL_TIDES" not in second  # delivered exactly once
+
+
 def test_say_privately_queues_and_relay_stores(client, data_dir):
     client.post("/v1/say_privately", json={"person": "alex", "text": "I'll text you"}, headers=AUTH)
     q = list((data_dir / "ops" / "outbox" / "telegram").glob("*.json"))

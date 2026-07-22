@@ -65,6 +65,35 @@ async def test_stream_captures_final_usage():
 
 
 @respx.mock
+async def test_stream_finalize_estimates_cost_on_disconnect():
+    # Content deltas but NO usage chunk (the client disconnected before the final one).
+    sse = 'data: {"choices":[{"delta":{"content":"' + "word " * 40 + '"}}]}\n\n'
+    respx.post(URL).mock(return_value=httpx.Response(200, content=sse.encode()))
+    p = UpstreamProvider(_settings())
+    session = p.stream({"model": "x-ai/grok-4.5", "messages": [{"role": "user", "content": "x" * 400}]})
+    agen = session.iter_sse()
+    async for _ in agen:  # consume the one content chunk, then simulate a disconnect
+        break
+    await agen.aclose()
+    session.finalize()
+    # A conservative, non-zero estimate is recorded so the hard cap isn't under-counted.
+    assert session.usage.estimated is True
+    assert session.usage.cost_usd > 0
+    await p.aclose()
+
+
+@respx.mock
+async def test_stream_start_raises_on_4xx_before_bytes():
+    respx.post(URL).mock(return_value=httpx.Response(429, text="rate limited"))
+    from soulmount_brain.provider import ProviderError
+    p = UpstreamProvider(_settings())
+    session = p.stream({"model": "x-ai/grok-4.5", "messages": [{"role": "user", "content": "x"}]})
+    with pytest.raises(ProviderError):
+        await session.start()   # detected before any SSE byte is relayed
+    await p.aclose()
+
+
+@respx.mock
 async def test_upstream_4xx_raises():
     from soulmount_brain.provider import ProviderError
     respx.post(URL).mock(return_value=httpx.Response(401, text="unauthorized"))

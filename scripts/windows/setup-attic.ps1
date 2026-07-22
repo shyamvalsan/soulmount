@@ -26,7 +26,10 @@ param(
   [int]$BrainPort       = 8100,
   [int]$SshPort         = 2222,
   [int]$ActiveStart     = 7,     # Windows Update active hours start (24h)
-  [int]$ActiveEnd       = 23     # ...end
+  [int]$ActiveEnd       = 23,    # ...end
+  # WSL distros from `wsl --install` are registered PER USER (HKCU\...\Lxss). The
+  # boot task MUST run as that user, NOT SYSTEM (SYSTEM has no registered distro).
+  [string]$TaskUser     = "$env:USERNAME"
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,34 +44,56 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 }
 
 # ── 1. Task Scheduler: boot the distro at startup ────────────────────────────
-Say "Task Scheduler: boot '$Distro' at startup (run whether logged on or not, highest privileges)"
+Say "Task Scheduler: boot '$Distro' at startup as user '$TaskUser' (S4U: runs whether logged on or not)"
 $taskName = "soulmount-wsl-boot"
 $action   = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d $Distro --exec /bin/true"
 $trigger  = New-ScheduledTaskTrigger -AtStartup
-$principal= New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+# Run as the distro-owning user (NOT SYSTEM). S4U = "run whether user is logged on or
+# not" without storing a password, while still loading that user's profile/HKCU so WSL
+# can find the distro. If the distro won't boot pre-login under S4U on your build,
+# re-register with stored credentials: schtasks /Change /TN $taskName /RU $TaskUser /RP *
+$principal= New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType S4U -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal `
   -Settings $settings -Force | Out-Null
-Ok "boot task '$taskName' registered"
+Ok "boot task '$taskName' registered as '$TaskUser'"
 
 # ── 2. Networking ────────────────────────────────────────────────────────────
 if ($Mode -eq "mirrored") {
-  Say "Mirrored networking: writing %UserProfile%\.wslconfig"
+  Say "Mirrored networking: merging networkingMode into %UserProfile%\.wslconfig"
   $wslconfig = Join-Path $env:USERPROFILE ".wslconfig"
-  $desired = "[wsl2]`nnetworkingMode=mirrored`n"
-  if ((-not (Test-Path $wslconfig)) -or ((Get-Content -Raw $wslconfig) -notmatch "networkingMode=mirrored")) {
-    Set-Content -Path $wslconfig -Value $desired -Encoding utf8
-    Ok "wrote $wslconfig (run 'wsl --shutdown' to apply)"
-  } else { Ok ".wslconfig already mirrored" }
+  # MERGE (don't clobber) — preserve any existing [wsl2] tuning (memory/processors/…).
+  if (-not (Test-Path $wslconfig)) {
+    Set-Content -Path $wslconfig -Value "[wsl2]`nnetworkingMode=mirrored`n" -Encoding utf8
+    Ok "created $wslconfig"
+  } else {
+    $lines = Get-Content $wslconfig
+    if ($lines -match "networkingMode=mirrored") {
+      Ok ".wslconfig already mirrored"
+    } elseif ($lines -match "networkingMode=") {
+      ($lines -replace "networkingMode=.*", "networkingMode=mirrored") | Set-Content $wslconfig -Encoding utf8
+      Ok "updated existing networkingMode -> mirrored (other settings preserved)"
+    } elseif ($lines -match "^\[wsl2\]") {
+      $out = @(); foreach ($l in $lines) { $out += $l; if ($l -match "^\[wsl2\]") { $out += "networkingMode=mirrored" } }
+      $out | Set-Content $wslconfig -Encoding utf8
+      Ok "inserted networkingMode into existing [wsl2] (other settings preserved)"
+    } else {
+      Add-Content $wslconfig "`n[wsl2]`nnetworkingMode=mirrored"
+      Ok "appended [wsl2] networkingMode=mirrored"
+    }
+  }
+  Warn "run 'wsl --shutdown' once to apply the networking change"
 
   Say "Hyper-V firewall: inbound-allow $BrainPort, $SshPort"
   # Mirrored mode shares ports with Windows; open them in the Hyper-V firewall.
   foreach ($p in @($BrainPort, $SshPort)) {
     $rule = "soulmount-in-$p"
     if (-not (Get-NetFirewallHyperVRule -Name $rule -ErrorAction SilentlyContinue)) {
+      # Scope to the local subnet so the brain/ssh are never exposed beyond the LAN.
       New-NetFirewallHyperVRule -Name $rule -DisplayName $rule -Direction Inbound `
-        -Action Allow -Protocol TCP -LocalPorts $p -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' | Out-Null
-      Ok "opened $p"
+        -Action Allow -Protocol TCP -LocalPorts $p -RemoteAddresses LocalSubnet `
+        -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' | Out-Null
+      Ok "opened $p (LocalSubnet only)"
     } else { Ok "rule for $p already present" }
   }
   Warn "Mirrored mode shares ports with Windows — keep any Windows OpenSSH on 22 (WSL sshd is $SshPort)."
@@ -80,9 +105,10 @@ else {
     netsh interface portproxy delete v4tov4 listenport=$p listenaddress=0.0.0.0 2>$null | Out-Null
     netsh interface portproxy add v4tov4 listenport=$p listenaddress=0.0.0.0 connectport=$p connectaddress=$wslIp | Out-Null
     New-NetFirewallRule -DisplayName "soulmount-in-$p" -Direction Inbound -Action Allow `
-      -Protocol TCP -LocalPort $p -ErrorAction SilentlyContinue | Out-Null
+      -Protocol TCP -LocalPort $p -Profile Private -RemoteAddress LocalSubnet `
+      -ErrorAction SilentlyContinue | Out-Null
   }
-  Ok "portproxy set to $wslIp (ports $BrainPort,$SshPort)"
+  Ok "portproxy set to $wslIp (ports $BrainPort,$SshPort; Private/LocalSubnet only)"
 
   # The WSL IP changes each boot → a startup task refreshes the proxy target.
   Say "Registering portproxy-refresh task (WSL IP changes per boot)"

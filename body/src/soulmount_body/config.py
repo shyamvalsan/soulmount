@@ -38,4 +38,7 @@ def load_config() -> BodyConfig:
         brain_api_key=os.getenv("BRAIN_API_KEY", ""),
         daemon_url=os.getenv("DAEMON_URL", "http://127.0.0.1:8000"),
         voice_backend=os.getenv("VOICE_BACKEND", "local"),
+        retry_interval_s=float(os.getenv("BODY_RETRY_INTERVAL_S", "5")),
+        health_poll_s=float(os.getenv("BODY_HEALTH_POLL_S", "10")),
+        greeting=os.getenv("BODY_GREETING", "Hi. I'm awake."),
     )

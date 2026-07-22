@@ -7,11 +7,17 @@ Live Telegram round-trips need a bot token → MORNING.md.
 from __future__ import annotations
 
 import json
+from datetime import time
 
 from soulmount_brain.channels import ChannelsWorker
 from soulmount_brain.config import Settings
 from soulmount_brain.context import build_context
+from soulmount_brain.house import House
 from soulmount_brain.queues import enqueue_telegram_dm
+
+# quiet_start == quiet_end → in_quiet_hours() is always False (empty window).
+_NEVER_QUIET = House(quiet_start=time(0, 0), quiet_end=time(0, 0))
+_ALWAYS_QUIET = House(quiet_start=time(0, 0), quiet_end=time(23, 59))
 
 
 class FakeTG:
@@ -102,6 +108,7 @@ async def test_relay_command_stores_and_acks(data_dir):
 
 async def test_proactive_cap_diverts_to_journal(data_dir):
     w, tg, brain, ctx = _worker(data_dir, {}, proactive_weekly_cap_per_person=1)
+    ctx.house = lambda: _NEVER_QUIET  # take quiet hours out of the equation
     now = ctx.now()
     enqueue_telegram_dm(ctx.dd, "111", "thinking of the tide today", now, motivated_by="mem:2026-07-20")
     enqueue_telegram_dm(ctx.dd, "111", "and again", now, motivated_by="mem:2026-07-21")
@@ -110,6 +117,32 @@ async def test_proactive_cap_diverts_to_journal(data_dir):
     assert len(tg.sent) == 1
     journals = list((data_dir / "inner" / "journal").glob("*.md"))
     assert any("weekly proactive cap reached" in f.read_text() for f in journals)
+    await ctx.aclose()
+
+
+async def test_proactive_deferred_during_quiet_hours(data_dir):
+    w, tg, brain, ctx = _worker(data_dir, {})
+    ctx.house = lambda: _ALWAYS_QUIET  # "no proactive anything" in quiet hours
+    enqueue_telegram_dm(ctx.dd, "111", "a 3am thought", ctx.now(), motivated_by="mem:x")
+    await w.drain_outbox()
+    assert tg.sent == []  # nothing sent
+    # Deferred, not consumed: the queue file remains for a later (waking-hours) drain.
+    assert list((ctx.dd.path("ops", "outbox", "telegram")).glob("*.json"))
+    await ctx.aclose()
+
+
+async def test_outbox_send_failure_keeps_file_and_survives(data_dir):
+    w, tg, brain, ctx = _worker(data_dir, {})
+    ctx.house = lambda: _NEVER_QUIET
+
+    async def _boom(chat_id, text):
+        raise RuntimeError("telegram 503")
+
+    tg.send_message = _boom
+    enqueue_telegram_dm(ctx.dd, "111", "please retry me", ctx.now())
+    await w.drain_outbox()  # must not raise
+    # File kept for retry; no proactive counter touched.
+    assert list((ctx.dd.path("ops", "outbox", "telegram")).glob("*.json"))
     await ctx.aclose()
 
 

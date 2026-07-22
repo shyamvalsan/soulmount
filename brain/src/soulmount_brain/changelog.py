@@ -15,8 +15,10 @@ Identity includes the last 5 CHANGELOG lines.
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Callable
 
@@ -40,6 +42,20 @@ class Changelog:
     def __init__(self, dd: DataDir, now_fn: Callable[[], datetime]):
         self.dd = dd
         self._now = now_fn
+
+    # Serialize changelog updates across processes (brain + me-time) so a robot's own
+    # write is never misattributed as an external edit mid-update (§7.2 item 7).
+    @contextmanager
+    def _lock(self):
+        lock_path = self.dd.path("ops", "state", "changelog.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(lock_path, "w")
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+            fh.close()
 
     # ── Baseline store ────────────────────────────────────────────────────────
     def _baseline_path(self):
@@ -71,15 +87,16 @@ class Changelog:
     def note_internal_change(self, relpath: str, description: str) -> None:
         """Record a robot-made change and advance the baseline so reconcile
         won't later misread it as an external edit."""
-        self._append_line(description)
-        if relpath in TRACKED:
-            baseline = self._load_baseline()
-            h = self._hash(relpath)
-            if h is None:
-                baseline.pop(relpath, None)
-            else:
-                baseline[relpath] = h
-            self._save_baseline(baseline)
+        with self._lock():
+            self._append_line(description)
+            if relpath in TRACKED:
+                baseline = self._load_baseline()
+                h = self._hash(relpath)
+                if h is None:
+                    baseline.pop(relpath, None)
+                else:
+                    baseline[relpath] = h
+                self._save_baseline(baseline)
 
     def seed_baseline_if_missing(self) -> None:
         """First run: adopt current files as the baseline without logging churn."""
@@ -89,6 +106,10 @@ class Changelog:
 
     def reconcile(self) -> list[str]:
         """Detect external edits, log them, advance the baseline. Returns messages."""
+        with self._lock():
+            return self._reconcile_locked()
+
+    def _reconcile_locked(self) -> list[str]:
         baseline = self._load_baseline()
         messages: list[str] = []
         changed = False

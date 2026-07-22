@@ -34,8 +34,10 @@ verify() {
 }
 rsync_code() {
   info "rsync body/ -> $SSH_USER@$HOST:$REMOTE_DIR"
+  # NB: exclude .env so --delete never wipes the robot-side EnvironmentFile pushed
+  # by push_env (a bug where `deploy-code` left the app with default config).
   run rsync -az --delete \
-    --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' --exclude '.pytest_cache' \
+    --exclude '.env' --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' --exclude '.pytest_cache' \
     "$ROOT/body/" "$SSH_USER@$HOST:$REMOTE_DIR/"
 }
 push_env() {
@@ -54,7 +56,8 @@ push_env() {
 }
 pip_install() {
   info "pip install -e .[robot] into $APPS_VENV (git-lfs deps → pip, not uv)"
-  run ssh "$SSH_USER@$HOST" "$APPS_VENV/bin/pip install -e '$REMOTE_DIR'[robot]"
+  # Quote the whole spec so [robot] isn't glob-expanded by the remote shell.
+  run ssh "$SSH_USER@$HOST" "$APPS_VENV/bin/pip install -e \"$REMOTE_DIR[robot]\""
 }
 
 case "$MODE" in

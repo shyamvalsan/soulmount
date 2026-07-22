@@ -124,15 +124,19 @@ async def test_succession_letter_then_identity_includes_it(data_dir):
     letters = list((data_dir / "inner" / "letters").glob("*-to-successor.md"))
     assert letters and "tide charts are worth keeping" in letters[0].read_text()
 
-    # A follow-up identity compile includes the letter, flagged, exactly once.
-    ident = ctx.identity.compile(
+    # A follow-up identity compile INCLUDES the letter and flags it — but compilation
+    # does NOT consume it (inspection / failed turns / me-time must not burn it).
+    r1 = ctx.identity.compile(
         body_state={"online": False}, budget_summary=ctx.guard.health_summary(), house=ctx.house()
-    ).text
-    assert "letter from the instance before you" in ident
-    assert "tide charts are worth keeping" in ident
-    # Delivered once: a second compile no longer includes it.
-    ident2 = ctx.identity.compile(
+    )
+    assert "letter from the instance before you" in r1.text
+    assert "tide charts are worth keeping" in r1.text
+    assert r1.included_letter is not None
+    # Only explicit delivery consumes it (as the API/body-app delivery path does).
+    ctx.identity.mark_letter_delivered(r1.included_letter)
+    r2 = ctx.identity.compile(
         body_state={"online": False}, budget_summary=ctx.guard.health_summary(), house=ctx.house()
-    ).text
-    assert "tide charts are worth keeping" not in ident2
+    )
+    assert "tide charts are worth keeping" not in r2.text
+    assert r2.included_letter is None
     await ctx.aclose()
