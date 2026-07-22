@@ -13,7 +13,7 @@ URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 def _settings(**kw) -> Settings:
-    return Settings(brain_provider="openrouter", openrouter_api_key="test-or-dummy-key", **kw)
+    return Settings(brain_provider="openrouter", openrouter_api_key="test-or-dummy-key", _env_file=None, **kw)
 
 
 @respx.mock

@@ -21,6 +21,7 @@ def _ctx(data_dir, **over):
         brain_model="x-ai/grok-4.5",
         budget_tz="UTC",
         reachy_host="192.0.2.1",
+        _env_file=None,
         **over,
     )
     ctx = build_context(s)

@@ -71,7 +71,9 @@ def test_auth_wrong_token_401(client):
 def test_auth_unconfigured_key_503(data_dir, monkeypatch):
     # No BRAIN_API_KEY → fail closed (never serve /v1 wide open).
     monkeypatch.setenv("SOULMOUNT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("SOULMOUNT_DISABLE_DOTENV", "1")
     monkeypatch.delenv("BRAIN_API_KEY", raising=False)
+    monkeypatch.setenv("BRAIN_API_KEY", "")
     monkeypatch.setenv("REACHY_HOST", "192.0.2.1")
     from fastapi.testclient import TestClient
 

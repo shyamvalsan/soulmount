@@ -63,6 +63,8 @@ _BASE_ENV = {
     # Hermetic: never touch the real robot (reachable on this LAN); the online
     # body-state path is covered separately with a mocked daemon.
     "REACHY_HOST": "192.0.2.1",  # TEST-NET-1, unroutable
+    "REACHY_IP": "",             # neutralise any REACHY_IP in the dev .env
+    "SOULMOUNT_DISABLE_DOTENV": "1",  # ignore the repo .env in tests
 }
 
 

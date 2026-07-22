@@ -151,6 +151,9 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    # Tests set SOULMOUNT_DISABLE_DOTENV to stay hermetic from the repo .env.
+    if os.environ.get("SOULMOUNT_DISABLE_DOTENV"):
+        return Settings(_env_file=None)
     return Settings()
 
 

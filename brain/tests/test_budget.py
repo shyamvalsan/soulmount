@@ -23,6 +23,7 @@ def _guard(tmp_path: Path, clock: dict, **overrides) -> BudgetGuard:
         budget_monthly_usd=overrides.get("monthly", 30.0),
         budget_goodnight_reserve_usd=0.05,
         budget_tz="UTC",
+        _env_file=None,
     )
     dd = DataDir(tmp_path)
     return BudgetGuard(settings, dd, now_fn=lambda: clock["t"])
