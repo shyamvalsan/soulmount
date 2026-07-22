@@ -80,7 +80,10 @@ brain-dev: ## Run the brain with autoreload (dev)
 brain-run: ## Run the brain (no reload)
 	@cd brain && $(UV) run soulmount-brain
 
-brain-test: ## pytest against a temp data dir built from templates/
+brain-test: ## pytest (offline; temp data dir from templates/, no model spend)
+	@cd brain && $(UV) run pytest -q -m "not upstream"
+
+brain-test-live: ## pytest incl. real-upstream tests (costs a few cents on BRAIN_MODEL)
 	@cd brain && $(UV) run pytest -q
 
 body-test: ## pytest the body app logic (light; no robot SDK needed)
