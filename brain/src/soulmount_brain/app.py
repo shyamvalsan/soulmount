@@ -9,24 +9,15 @@ from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import __version__
-from .bodystate import BodyStateProbe
-from .budget import BudgetGuard
-from .changelog import Changelog
-from .config import Settings, get_settings
-from .datadir import DataDir
-from .house import House, load_house
-from .identity import IdentityCompiler
-from .inner import Inner
+from .config import get_settings
+from .context import BrainContext, build_context
 from .logging_utils import get_logger
-from .memory import Memory
-from .provider import ProviderError, UpstreamProvider
+from .provider import ProviderError
 from .queues import enqueue_telegram_dm, store_relay
 from .schemas import (
     InterestsIn,
@@ -41,44 +32,6 @@ from .schemas import (
 log = get_logger("soulmount.brain")
 
 
-@dataclass
-class BrainContext:
-    settings: Settings
-    dd: DataDir
-    provider: UpstreamProvider
-    guard: BudgetGuard
-    changelog: Changelog
-    identity: IdentityCompiler
-    body: BodyStateProbe
-    memory: Memory
-    inner: Inner
-    started_at: float
-
-    def now(self) -> datetime:
-        return datetime.now(self.settings.timezone)
-
-    def house(self) -> House:
-        return load_house(self.dd)
-
-
-def build_context(settings: Settings) -> BrainContext:
-    dd = DataDir.from_settings(settings)
-    now_fn = lambda: datetime.now(settings.timezone)  # noqa: E731
-    changelog = Changelog(dd, now_fn)
-    return BrainContext(
-        settings=settings,
-        dd=dd,
-        provider=UpstreamProvider(settings),
-        guard=BudgetGuard(settings, dd, now_fn),
-        changelog=changelog,
-        identity=IdentityCompiler(settings, dd, changelog, now_fn),
-        body=BodyStateProbe(settings),
-        memory=Memory(dd, now_fn),
-        inner=Inner(dd, changelog, now_fn),
-        started_at=time.monotonic(),
-    )
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -87,8 +40,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await app.state.ctx.provider.aclose()
-        await app.state.ctx.body.aclose()
+        await app.state.ctx.aclose()
 
 
 app = FastAPI(title="soulmount-brain", version=__version__, lifespan=lifespan)
