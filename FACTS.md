@@ -54,6 +54,27 @@ Code to these **real** paths (from live `/openapi.json`):
 - Simulator: **`reachy-mini-daemon --sim`** (MuJoCo), dashboard at `http://127.0.0.1:8000/`. Dev-run an app directly with `python -m <pkg>.main`.
 - Scaffolder: `reachy-mini-app-assistant create <name> <path>` (matches spec).
 
+## 2.1 ROBOT ACTUAL STACK (verified live 2026-07-23) — older than GitHub `main`
+The overnight research read GitHub `main` (reachy_mini 1.10.0rc2, conversation_app 0.10.0).
+The physical robot is OLDER and pinned:
+- `reachy_mini` **1.6.3** in BOTH `/venvs/mini_daemon` and `/venvs/apps_venv`, Python
+  3.12.12, Debian 13 (trixie). Daemon `/update/available` offers **1.6.3 → 1.9.0**.
+- 1.6.3 DOES have our app contract: `reachy_mini.apps.app.ReachyMiniApp.run(self,
+  reachy_mini, stop_event)`, `wrapped_run`, `stop`, entry-point group `reachy_mini_apps`.
+  → **our body app is compatible with 1.6.3 as-is** (body `[robot]` pin relaxed to `>=1.6`).
+- `reachy_mini_conversation_app` **0.3.0** installed (not 0.10.0). It is ALSO realtime-
+  based: `config.py` `MODEL_NAME=gpt-realtime`, and `openai_realtime.py` does
+  `AsyncOpenAI(api_key=...)` with **NO base_url** → hardwired to OpenAI's Realtime API.
+  So 0.3.0 can't be pointed at our brain by config alone (would need a patch or an
+  `OPENAI_BASE_URL` redirect to a local OpenAI-Realtime-compatible server).
+- Other installed apps incl. hello_world, emotions, dances, etc. (20 total).
+
+**Implication for voice (Phase 2):** the clean speech-to-speech `--llm_backend
+chat-completions` path (FACTS §3) targets the 0.10.0 line's `HF_REALTIME_WS_URL` local
+mode. On 0.3.0 that config knob isn't present. So voice needs an OWNER DECISION: update
+the robot toward the current line, or patch/redirect 0.3.0. Deploying the body app
+does NOT require this — it works on 1.6.3 now.
+
 ## 3. Conversation app (Phase 2/3 fork base) — MAJOR SPEC DIVERGENCE
 
 - Repo `pollen-robotics/reachy_mini_conversation_app`, **Apache-2.0**, pin fork to SHA

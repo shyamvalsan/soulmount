@@ -12,8 +12,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The robot ships reachy_mini 1.6.3 (daemon + apps_venv). Our app only uses the
+# ReachyMiniApp contract (present in 1.6.3), so match the installed line — do NOT force
+# 1.10 (that would upgrade the SDK out of step with the 1.6.3 daemon). See FACTS §2.1.
 robot = [
-    "reachy-mini>=1.10.0rc2",
+    "reachy-mini>=1.6",
 ]
 dev = [
     "pytest>=8.2",
