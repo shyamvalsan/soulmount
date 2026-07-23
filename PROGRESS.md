@@ -135,3 +135,14 @@ Append-only. ~Every 30 min or per acceptance item: done / next / blockers / spen
 - **Next (owner, morning):** MORNING.md checklist — robot key/password + smoke, `make
   init-data`, attic inventory + Phase 4 reboot drills, Phase 2 voice bake-off, and the
   §F design decisions. Rotate the dev OpenRouter key if desired (not leaked; gitignored).
+
+### 2026-07-23 11:50 EEST — morning session (live, supervised)
+- **Robot smoke (owner-approved, past quiet hours):** volume lowered 100→60 (verified);
+  emotion `cheerful1` played (HTTP 200, motion confirmed). Sound skipped — daemon has NO
+  built-in sound files (upload one for the goodnight clip in Phase 2/3). Camera = WebRTC
+  :8443, deferred. → Phase 0 motion/volume paths validated live.
+- **Owner decisions:** attic still offline (Phase 4 stays deferred); owner runs `make
+  init-data` themselves; voice-wiring research (speech-to-speech ↔ brain) launched.
+- **Flagged:** commit author is a real name+email on a to-be-public repo (MORNING §F).
+- **Next:** owner runs init-data (reset dev dir first); then key install + deploy; voice
+  research result → decide the Phase-2 backend + any /v1/responses shim.
