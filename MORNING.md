@@ -100,9 +100,16 @@ done overnight because §2.1 / quiet hours / the attic being offline forbade it.
       with `ss -tnp` / provider logs (document in the runbook).
 
 ## E. Phase 2 — voice bake-off (multi-day, with the family)
-- [ ] Decide how the Grok brain sits behind the voice pipeline. **Open architecture question**
-      (FACTS §3): `speech-to-speech --llm_backend responses-api` speaks the OpenAI *Responses*
-      API, but our brain exposes `/v1/chat/completions`. Verify `speech-to-speech --help` live;
-      either add a `/v1/responses` shim to the brain or use a chat-completions backend flag.
-- [ ] Run one day on Candidate A (local cascade) and one on Candidate B (hosted realtime);
-      pick a TTS voice with the family; set `VOICE_BACKEND` + pin the voice in `.env`.
+- [x] **RESOLVED (morning research, FACTS §3):** the brain needs NO change. Use
+      `--llm_backend chat-completions` — it consumes our `/v1/chat/completions` as-is; no
+      `/v1/responses` shim. Verified our tools/extra_body passthrough works.
+- [ ] **Candidate A (local cascade):** run HF `speech-to-speech`:
+      `speech-to-speech --mode realtime --llm_backend chat-completions --model_name $BRAIN_MODEL
+      --responses_api_base_url http://<brain>:$BRAIN_PORT/v1 --responses_api_api_key $BRAIN_API_KEY
+      --responses_api_stream`, then point the app at it with `HF_REALTIME_CONNECTION_MODE=local`
+      + `HF_REALTIME_WS_URL=ws://<host>:8765/v1/realtime`. Pick STT/TTS + a voice with the family;
+      pin the voice in `.env`. (If OpenRouter 400s on extra_body, add `--responses_api_disable_thinking false`.)
+- [ ] **Candidate B (hosted realtime):** the app's default HF realtime endpoint; spend sits
+      outside the §7.7 guard — set a hard monthly cap on that key. Measure a conversation day
+      AND an idle-mic day.
+- [ ] Run one day on each; record latency + €/day in FACTS; set `VOICE_BACKEND`; pin the voice.

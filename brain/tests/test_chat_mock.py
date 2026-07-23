@@ -70,6 +70,24 @@ def test_caller_system_prompt_is_not_overridden(client):
 
 
 @respx.mock
+def test_tools_and_extra_body_passthrough(client):
+    # The voice loop (speech-to-speech --llm_backend chat-completions) forwards the
+    # robot's tools + tool_choice + provider extra_body keys; the brain must relay them
+    # faithfully so the robot can move/emote mid-conversation (FACTS §3).
+    route = respx.post(URL).mock(return_value=httpx.Response(200, json=_completion()))
+    tools = [{"type": "function", "function": {"name": "play_emotion",
+              "parameters": {"type": "object", "properties": {"name": {"type": "string"}}}}}]
+    client.post("/v1/chat/completions", json={
+        "messages": [{"role": "user", "content": "be happy"}],
+        "tools": tools, "tool_choice": "auto",
+        "chat_template_kwargs": {"enable_thinking": False},  # an extra_body-style key
+    }, headers=AUTH)
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["tools"] == tools and sent["tool_choice"] == "auto"
+    assert sent["chat_template_kwargs"] == {"enable_thinking": False}  # unknown keys not stripped
+
+
+@respx.mock
 def test_stream_relays_and_records_cost(client, data_dir):
     sse = (
         'data: {"choices":[{"delta":{"content":"he"}}]}\n\n'

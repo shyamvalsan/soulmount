@@ -43,12 +43,14 @@ protocol over WebSocket. So the actual conversation turn is a **seam**
 (`voice.py::VoiceBackend`, currently `NullVoiceBackend`) wired once the Phase 2
 bake-off picks a backend:
 
-- **local** — run HF `speech-to-speech` (VAD→STT→LLM→TTS) pointed at the brain with
-  `--responses_api_base_url`; connect the app via `HF_REALTIME_CONNECTION_MODE=local`
-  + `HF_REALTIME_WS_URL`. **Open question:** `speech-to-speech --llm_backend
-  responses-api` speaks the OpenAI *Responses* API; our brain exposes
-  `/v1/chat/completions`. Either add a `/v1/responses` shim to the brain or use a
-  chat-completions backend flag — verify `speech-to-speech --help` live first.
+- **local** — run HF `speech-to-speech` (VAD→STT→LLM→TTS) pointed at the brain.
+  **RESOLVED (FACTS §3):** use `--llm_backend chat-completions` (NOT the default
+  `responses-api`) — it calls our `/v1/chat/completions` as-is; no `/v1/responses` shim.
+  `speech-to-speech --mode realtime --llm_backend chat-completions --model_name $BRAIN_MODEL
+  --responses_api_base_url http://<brain>:<port>/v1 --responses_api_api_key $BRAIN_API_KEY
+  --responses_api_stream`, then connect the app via `HF_REALTIME_CONNECTION_MODE=local`
+  + `HF_REALTIME_WS_URL=ws://<host>:8765/v1/realtime`. Brain passes tools/extra_body through
+  faithfully (tested) — the robot's motion tools work over the voice loop.
 - **realtime** — the hosted HF/OpenAI realtime endpoint; optional `ask_brain` tool
   routing hard/memory questions to the Grok brain.
 

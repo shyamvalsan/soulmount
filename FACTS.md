@@ -65,7 +65,25 @@ Code to these **real** paths (from live `/openapi.json`):
 - **Two real ways to put our own (Grok) brain behind it** — this is the Phase 2 bake-off, decided with the owner:
   1. **Candidate A (local cascade):** run HF's separate **`speech-to-speech`** server (VAD→STT→LLM→TTS, exposes an OpenAI-Realtime-compatible `/v1/realtime` WS). Point *it* at an OpenAI-compatible LLM with `--responses_api_base_url` / `--llm_backend`. Then point the conversation app at the cascade via `HF_REALTIME_CONNECTION_MODE=local` + `HF_REALTIME_WS_URL=ws://host:port/v1/realtime`. **The `--responses_api_base_url` flag lives on `speech-to-speech`, NOT on the conversation app.**
   2. **Candidate B (hosted realtime):** the app's default deployed HF realtime endpoint (or OpenAI Realtime). Model chosen server-side. Spend sits outside the §7.7 guard.
-- **OPEN QUESTION for morning (`MORNING.md`)**: `speech-to-speech --llm_backend responses-api` expects the OpenAI **Responses** API shape, while our brain exposes **`/v1/chat/completions`**. Either (a) add a `/v1/responses` adapter to the brain, or (b) find the `speech-to-speech` backend flag that consumes chat-completions. Do NOT guess — verify against the live `speech-to-speech --help` at Phase 2. This is why the real voice wiring is a supervised job, not overnight.
+- **RESOLVED (2026-07-23, morning research):** NO `/v1/responses` shim is needed. HF
+  `speech-to-speech` has a first-class **`--llm_backend chat-completions`** that calls
+  `POST /v1/chat/completions` in standard OpenAI shape (via the OpenAI SDK) — it consumes
+  our brain as-is. `responses-api` is only the *default* of four backends, not the only one.
+  - Wiring (Candidate A): `speech-to-speech --mode realtime --llm_backend chat-completions
+    --model_name <BRAIN_MODEL> --responses_api_base_url http://<brain>:<port>/v1
+    --responses_api_api_key <BRAIN_API_KEY> --responses_api_stream` (the connection flags are
+    prefixed `--responses_api_*` for BOTH backends — a shared-naming gotcha, not a hint).
+  - Conversation app: `HF_REALTIME_CONNECTION_MODE=local`,
+    `HF_REALTIME_WS_URL=ws://<host>:8765/v1/realtime`.
+  - Brain requirements — all already met (verified by `test_tools_and_extra_body_passthrough`):
+    (1) faithful passthrough of `tools`/`tool_choice`/`tool`-role messages — the robot's
+    motion tools (dance, play_emotion, move_head, head_tracking) are advertised over the
+    Realtime session and must reach the LLM; (2) tolerate provider `extra_body` keys
+    (`chat_template_kwargs`, `reasoning_effort`) — we forward them; if OpenRouter rejects
+    them, pass `--responses_api_disable_thinking false` + omit `--responses_api_reasoning_effort`
+    at Phase 2; (3) standard SSE with a final usage chunk — OpenRouter provides it.
+  - So the voice integration is a Phase-2 *deployment* job (install s2s, pick STT/TTS+voice,
+    bake-off), NOT a brain code change.
 - **Identity injection fork point** (`prompts.py::get_session_instructions`): final instructions = `"{memory_prompt}\n\n{instructions}"`, where `instructions` = the resolved profile's `instructions.txt`. Cleanest, lowest-blast-radius fork: **ship a bundled custom profile dir** + set `REACHY_MINI_CUSTOM_PROFILE` (or `REACHY_MINI_EXTERNAL_PROFILES_DIRECTORY`), rather than patching upstream code. Greeting from `greeting.txt` (else default); voice from `voice.txt` (default `"Aiden"`; other voices: Ryan, Dylan, Eric, Serena, Vivian, …) — the chosen voice is pinned in `.env` and must never drift (spec §7 / Phase 2).
 - Useful app env: `REACHY_MINI_CUSTOM_PROFILE`, `REACHY_MINI_EXTERNAL_PROFILES_DIRECTORY`, `REACHY_MINI_EXTERNAL_TOOLS_DIRECTORY`, `AUTOLOAD_EXTERNAL_TOOLS`, `REACHY_MINI_APP_TIMEOUT_MINUTES` (default 1440), `REACHY_MINI_SKIP_DOTENV`. App data dir: `~/.local/share/reachy_mini_conversation_app/`.
 
