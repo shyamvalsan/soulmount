@@ -68,6 +68,13 @@ The physical robot is OLDER and pinned:
   So 0.3.0 can't be pointed at our brain by config alone (would need a patch or an
   `OPENAI_BASE_URL` redirect to a local OpenAI-Realtime-compatible server).
 - Other installed apps incl. hello_world, emotions, dances, etc. (20 total).
+- **Daemon launches apps WITHOUT the app-dir `.env`** (verified 2026-07-23): a
+  daemon-started subprocess has none of `BRAIN_HOST`/`BRAIN_API_KEY`/… in its
+  environment, so a config that only reads `os.environ` silently falls back to
+  defaults (`127.0.0.1`) and the body app droops against the robot's own localhost.
+  Fix: `body/config.py::load_config()` now LOADS the `.env` itself (`$SOULMOUNT_BODY_ENV`
+  or walks up from the package to `soulmount-body/.env`); process env still wins.
+  Only a Phase-4 systemd `EnvironmentFile` would inject it at launch — the daemon does not.
 
 **Implication for voice (Phase 2):** the clean speech-to-speech `--llm_backend
 chat-completions` path (FACTS §3) targets the 0.10.0 line's `HF_REALTIME_WS_URL` local

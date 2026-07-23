@@ -27,8 +27,11 @@ start_soulmount() {
 verify() {
   sleep 3
   # Parse the actual current-app field rather than substring-matching raw JSON.
+  # The 1.6.3 daemon nests the name under .info.name; keep the older flat keys as
+  # fallbacks. Also require state==running so a crashed app isn't reported as OK.
   if curl -s -m 8 "$RBASE/api/apps/current-app-status" \
-       | jq -e '(.app_name // .name // .app // "")|test("soulmount";"i")' >/dev/null 2>&1; then
+       | jq -e '((.info.name // .app_name // .name // .app // "")|test("soulmount";"i"))
+                and (.state == null or .state == "running")' >/dev/null 2>&1; then
     ok "soulmount visible in dashboard"
   else
     err "soulmount not visible after start"; return 1
