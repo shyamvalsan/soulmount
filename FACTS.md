@@ -55,6 +55,13 @@ Code to these **real** paths (from live `/openapi.json`):
 - Scaffolder: `reachy-mini-app-assistant create <name> <path>` (matches spec).
 
 ## 2.1 ROBOT ACTUAL STACK (verified live 2026-07-23) — older than GitHub `main`
+> **UPDATE (2026-07-23 PM):** robot updated **1.6.3 → 1.9.0** via `POST /update/start`
+> (both venvs; full backups in `~/soulmount-backups` on the robot; no auto-rollback in the
+> updater). The soulmount app was re-verified after: still registered in `reachy_mini_apps`
+> and imports cleanly on the 1.9.0 SDK. Robot timezone corrected from a non-local zone (~2h
+> behind) to the family's local zone — it was skewing the body app's quiet-hours check, which
+> uses the robot's own clock. `reachy_mini_conversation_app` still **0.3.0** (→ 0.9.x pending for voice,
+> which needs `reachy-mini>=1.8.4`, now satisfied). The rest of this section is the pre-update baseline.
 The overnight research read GitHub `main` (reachy_mini 1.10.0rc2, conversation_app 0.10.0).
 The physical robot is OLDER and pinned:
 - `reachy_mini` **1.6.3** in BOTH `/venvs/mini_daemon` and `/venvs/apps_venv`, Python

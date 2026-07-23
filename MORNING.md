@@ -106,6 +106,14 @@ set; leakcheck tree+history clean; robot persona verified live. Details are giti
 - [x] **STACK DECISION (2026-07-23):** UPDATE the robot toward the current reachy_mini /
       conversation_app line (off the pinned 1.6.3 / 0.3.0) so the chat-completions voice
       path is available. Doing voice NOW; attic PC (Phase 4) is the LAST step, after all else.
+- [x] **PLAN (2026-07-23, owner-approved):** daemon **1.6.3 → 1.9.0** (backup both venvs first;
+      no auto-rollback) + conversation_app **0.9.x** on the robot. Stand up HF **speech-to-speech**
+      server on the **laptop** (CPU): STT parakeet, TTS **Kokoro**, voice **`af_bella`**, pointed at
+      the brain via `--llm_backend chat-completions --responses_api_base_url http://<brain>/v1`.
+      Robot points at it: `HF_REALTIME_CONNECTION_MODE=local` + `HF_REALTIME_WS_URL=ws://<laptop>:8765/v1/realtime`.
+      **2a** audition voices with the stock conversation app first; **2b** then port the realtime-WS
+      client into our app's voice backend (keep the robot's soul + rituals). Voice pipeline runs on a
+      COMPANION HOST, not the robot's Pi.
 - [x] **RESOLVED (morning research, FACTS §3):** the brain needs NO change. Use
       `--llm_backend chat-completions` — it consumes our `/v1/chat/completions` as-is; no
       `/v1/responses` shim. Verified our tools/extra_body passthrough works.
