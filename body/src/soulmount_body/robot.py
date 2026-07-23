@@ -49,6 +49,11 @@ class RobotControl:
         except (httpx.HTTPError, ValueError):
             return None
         if isinstance(data, dict):
+            # The 1.6.3 daemon nests the current-app name under .info.name; keep the
+            # older flat keys as fallbacks (mirrors scripts/deploy.sh verify()).
+            info = data.get("info")
+            if isinstance(info, dict) and info.get("name"):
+                return info["name"]
             return data.get("app_name") or data.get("name") or data.get("app")
         return None
 

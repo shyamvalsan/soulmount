@@ -31,6 +31,9 @@ done overnight because §2.1 / quiet hours / the attic being offline forbade it.
 - [ ] **Live smoke tests (audible/motion — announced).** Context: antenna wiggle, one emotion,
       one low sound, one camera snapshot (robot awake). Run: `make smoke`  (asks before each move).
 - [ ] **Enumerate the live emotion/dance move list** into PREFLIGHT.md. Run: `make preflight`.
+- [x] **Wake greeting = Option B (2026-07-23):** no TTS yet (that's Phase 2); on wake, play a
+      short NON-VERBAL wake sound/emotion instead of the current logged "would say" line. Pick
+      the specific emotion during `make smoke`/`make preflight`. (body app wake ritual.)
 
 ## B. Data dir — interactive init (need your household answers)   ✅ DONE (2026-07-23)
 _Charter (USER.md/HOUSE.md) + SOUL.md name & city filled in the data dir; `.leakcheck-terms`
@@ -49,10 +52,13 @@ set; leakcheck tree+history clean; robot persona verified live. Details are giti
 
 ## C. Secrets to fill in `.env` (phases that need them auto-skipped overnight)
 - [ ] `BRAIN_API_KEY` — generate: `openssl rand -hex 32` → paste into `.env`.
-- [ ] Telegram: create the bot with @BotFather; fill `TELEGRAM_BOT_TOKEN`,
-      `TELEGRAM_ALLOWED_USER_IDS` (each member's numeric id), `TELEGRAM_FAMILY_CHAT_ID`.
-      Then: `make channels-run` (drops --dry-run once you're ready).
-- [ ] Search: `SEARCH_API_KEY` (Brave free tier) — or set `SEARCH_API_PROVIDER=searxng` + `SEARXNG_BASE_URL`.
+- [~] Telegram: IN PROGRESS (2026-07-23) — `TELEGRAM_BOT_TOKEN` + two members' numeric
+      chat IDs added to `.env`; `TELEGRAM_FAMILY_CHAT_ID` (group chat) deferred. Go live with
+      `make channels-run` once the Phase 5 send-path decisions land.
+- [~] Search: RESOLVED (2026-07-23) — use **langsearch** (free tier,
+      https://docs.langsearch.com/api/web-search-api). Needs a `langsearch` provider added to
+      `search.py` + its host in the egress allowlist; then `SEARCH_API_PROVIDER=langsearch` +
+      `SEARCH_API_KEY=<langsearch key>`.
 - [ ] Studio (only if/when you enable Phase 8): `YOUTUBE_CLIENT_SECRETS_PATH`, `YOUTUBE_CHANNEL_ID`.
 
 ## D. Attic PC — deferred entirely (it was offline tonight)
@@ -72,36 +78,34 @@ set; leakcheck tree+history clean; robot persona verified live. Details are giti
       generator during Phase 4 (SPEC §Phase 4 fallback path) — not written overnight.
 
 ## F. Decisions surfaced by the code review (your call, before the relevant phase)
-- [ ] **Commit author identity on this to-be-public repo.** All commits are authored with
-      your global git identity (real name + personal email). `leakcheck` scans file CONTENT,
-      not commit metadata, so it won't flag this — but the author field IS household-
-      identifying once the repo is public. Decide: (a) keep it (normal for OSS), or (b) set a
-      project git identity for future commits, and/or anonymize existing history before the
-      first public push (history rewrite is destructive — I won't do it without your go-ahead).
-      Check yours with `git log -1 --format='%an <%ae>'`.
+- [x] **Commit author identity on this to-be-public repo.** RESOLVED (2026-07-23): owner
+      chose (a) — keep the existing global git identity as commit author (normal for OSS).
+      `leakcheck` scans file CONTENT, not commit metadata, so this is accepted as-is; no
+      history rewrite. (The author field remains household-identifying once public — an
+      accepted trade-off.)
 - [ ] **Rotate the OpenRouter key before open-sourcing.** It's in `.env` (gitignored,
       NOT committed — verified), so this is hygiene, not a leak: the key was handled
       during an automated run. `openssl`/dashboard → new key → update `.env`.
-- [ ] **Is a robot-initiated `say_privately` DM "proactive"?** Today directed DMs
-      (from "text me that" in conversation) send immediately and aren't weekly-capped;
-      only `motivated_by` (memory follow-up / Sunday doodle) sends are quiet-hours-
-      deferred and capped. Decide before Phase 5 goes live whether unprompted
-      `say_privately` should also be gated. (channels.py `_send_outbox_entry`.)
-- [ ] **Mechanical anti-triangulation** (§7.4/§8): currently source-tagged in memory +
-      charter-enforced; not mechanically blocked in the send path. Decide the
-      enforcement model (per-fact source tags + a send-path check) before Phase 5 live.
-- [ ] **Over-cap proactive → journal (guardrail 12 gray area):** when a proactive DM
-      hits the weekly cap, the robot's own message is filed into `inner/journal/` with a
-      code-added "(unsent — cap reached)" prefix. SPEC §8 says "the thought goes to the
-      journal"; but the *code* frames+files it. Keep (preserves the thought) or divert to
-      `ops/` instead. Your call. (channels.py `_send_outbox_entry`.)
-- [ ] **Egress allowlist backstop** (§9.6 "enforce in code"): today compliant by
-      construction (verified: only model-provider/telegram/search/daemon hosts are
-      called; the search tool takes a query, not a URL, so no SSRF). Decide whether to
-      add a thin host-allowlist wrapper on the shared httpx clients. Verify at runtime
-      with `ss -tnp` / provider logs (document in the runbook).
+- [x] **Is a robot-initiated `say_privately` DM "proactive"?** RESOLVED (2026-07-23):
+      cap proactive/unprompted `say_privately` to **7 per week** (shared weekly ledger with
+      `motivated_by` sends; still quiet-hours-deferred). Directed DMs from live conversation
+      ("text me that") stay immediate and uncapped. (channels.py `_send_outbox_entry`.)
+- [ ] **Mechanical anti-triangulation** (§7.4/§8): PENDING — owner asked for an explanation
+      (2026-07-23); decision to follow. Currently source-tagged in memory + charter-enforced,
+      not mechanically blocked in the send path. Enforcement model TBD before Phase 5 live.
+- [x] **Over-cap proactive → journal (guardrail 12 gray area):** RESOLVED (2026-07-23):
+      KEEP — file the robot's own message into `inner/journal/` with the code-added
+      "(unsent — cap reached)" prefix (preserves the thought). (channels.py `_send_outbox_entry`.)
+- [x] **Egress allowlist backstop** (§9.6 "enforce in code"): RESOLVED (2026-07-23):
+      compliant-by-construction — NO extra wrapper beyond the existing egress hook. (Verified:
+      only model-provider/telegram/search/daemon hosts are called; the search tool takes a
+      query, not a URL, so no SSRF.) Verify at runtime with `ss -tnp`; document in the runbook.
+      NB: adding the langsearch provider must add its host to the egress allowlist (egress.py).
 
 ## E. Phase 2 — voice bake-off (multi-day, with the family)
+- [x] **STACK DECISION (2026-07-23):** UPDATE the robot toward the current reachy_mini /
+      conversation_app line (off the pinned 1.6.3 / 0.3.0) so the chat-completions voice
+      path is available. Doing voice NOW; attic PC (Phase 4) is the LAST step, after all else.
 - [x] **RESOLVED (morning research, FACTS §3):** the brain needs NO change. Use
       `--llm_backend chat-completions` — it consumes our `/v1/chat/completions` as-is; no
       `/v1/responses` shim. Verified our tools/extra_body passthrough works.

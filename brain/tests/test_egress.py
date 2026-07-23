@@ -25,6 +25,12 @@ def test_allowlist_includes_googleapis_only_with_studio():
     assert "www.googleapis.com" in allowed_hosts(_s(studio_enabled=True))
 
 
+def test_allowlist_langsearch_host():
+    h = allowed_hosts(_s(search_api_provider="langsearch"))
+    assert "api.langsearch.com" in h
+    assert "api.search.brave.com" not in h  # not the default provider here
+
+
 async def test_hook_allows_allowlisted_and_blocks_others():
     check = event_hooks({"openrouter.ai"})["request"][0]
     await check(httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"))  # ok

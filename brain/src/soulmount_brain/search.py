@@ -1,6 +1,6 @@
 """Web search for me time (SPEC §7.6 SEARCH_API_PROVIDER).
 
-Brave free tier by default; SearXNG as the zero-cost self-hosted alternative.
+Providers: brave (default), langsearch (free tier, Bearer key), searxng (self-hosted).
 Degrades gracefully (``available() == False``) when unconfigured, so an overnight
 run with no key simply has no search tool rather than crashing.
 """
@@ -36,7 +36,7 @@ class SearchProvider:
             self._client = None
 
     def available(self) -> bool:
-        if self.provider == "brave":
+        if self.provider in ("brave", "langsearch"):
             return bool(self.settings.search_api_key)
         if self.provider == "searxng":
             return bool(self.settings.searxng_base_url)
@@ -47,6 +47,8 @@ class SearchProvider:
             return []
         if self.provider == "brave":
             return await self._brave(query, k)
+        if self.provider == "langsearch":
+            return await self._langsearch(query, k)
         if self.provider == "searxng":
             return await self._searxng(query, k)
         return []
@@ -62,6 +64,21 @@ class SearchProvider:
         results = (r.json().get("web") or {}).get("results") or []
         return [{"title": x.get("title"), "url": x.get("url"), "snippet": x.get("description")}
                 for x in results[:k]]
+
+    async def _langsearch(self, query: str, k: int) -> list[dict]:
+        # langsearch web-search: POST + Bearer; results at data.webPages.value[].
+        # The API clamps count to 1..10.
+        r = await self._c().post(
+            "https://api.langsearch.com/v1/web-search",
+            headers={"Authorization": f"Bearer {self.settings.search_api_key}",
+                     "Content-Type": "application/json"},
+            json={"query": query, "count": max(1, min(10, k))},
+        )
+        r.raise_for_status()
+        pages = ((r.json().get("data") or {}).get("webPages") or {}).get("value") or []
+        return [{"title": x.get("name"), "url": x.get("url"),
+                 "snippet": x.get("snippet") or x.get("summary")}
+                for x in pages[:k]]
 
     async def _searxng(self, query: str, k: int) -> list[dict]:
         base = self.settings.searxng_base_url.rstrip("/")

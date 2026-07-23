@@ -42,6 +42,8 @@ def allowed_hosts(s: Settings) -> set[str]:
         hosts.add(_host(s.brain_upstream_base_url))
     if s.search_api_provider == "brave":
         hosts.add("api.search.brave.com")
+    if s.search_api_provider == "langsearch":
+        hosts.add("api.langsearch.com")
     if s.searxng_base_url:
         hosts.add(_host(s.searxng_base_url))
     for h in (s.robot_host, s.reachy_host, s.reachy_ip, s.brain_host):
