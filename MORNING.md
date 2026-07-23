@@ -32,7 +32,9 @@ done overnight because §2.1 / quiet hours / the attic being offline forbade it.
       one low sound, one camera snapshot (robot awake). Run: `make smoke`  (asks before each move).
 - [ ] **Enumerate the live emotion/dance move list** into PREFLIGHT.md. Run: `make preflight`.
 
-## B. Data dir — interactive init (need your household answers)
+## B. Data dir — interactive init (need your household answers)   ✅ DONE (2026-07-23)
+_Charter (USER.md/HOUSE.md) + SOUL.md name & city filled in the data dir; `.leakcheck-terms`
+set; leakcheck tree+history clean; robot persona verified live. Details are gitignored._
 - [ ] **`make init-data`** — walks you through USER.md (members, languages, learn-vs-never)
       and `.leakcheck-terms`, then `git init` locally. Context: the overnight build ran against a
       *placeholder* data dir; real personal content only exists after you do this. Run: `make init-data`.
