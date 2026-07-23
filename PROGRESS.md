@@ -146,3 +146,12 @@ Append-only. ~Every 30 min or per acceptance item: done / next / blockers / spen
 - **Flagged:** commit author is a real name+email on a to-be-public repo (MORNING §F).
 - **Next:** owner runs init-data (reset dev dir first); then key install + deploy; voice
   research result → decide the Phase-2 backend + any /v1/responses shim.
+
+### 2026-07-23 12:05 EEST — household charter filled (owner-provided)
+- init-data completed by hand: USER.md + HOUSE.md filled in the DATA DIR at the owner's
+  explicit request; .leakcheck-terms set. **leakcheck tree + --history CLEAN** — no
+  household-identifying string appears in the repo or its history. Data-dir local soul
+  history committed (no remote). Names/PII live only in ~/soulmount-data (gitignored).
+- Brain sanity vs the real dir: HOUSE parsed (quiet 21:30–07:30, volume 60, camera
+  on-request-only); identity compiles (~1830 tokens), child-charter + hard-rules present.
+- PENDING (owner): SOUL.md still has <robot name>/<city> placeholders; robot SSH key install.
