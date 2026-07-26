@@ -1,0 +1,12 @@
+# Phase 2 voice-service (companion host) — install into a py3.12 venv (laptop is on 3.14).
+# The HF `speech-to-speech` framework does NOT build on modern Python (its qwen-tts ->
+# librosa -> numba 0.53.1 chain caps at <3.10), so this is a minimal, self-owned cascade.
+fastapi>=0.110
+uvicorn>=0.29
+faster-whisper>=1.0
+kokoro-onnx>=0.4
+soundfile>=0.12
+scipy>=1.11
+numpy>=1.26
+httpx>=0.27
+# System dep (not pip): espeak-ng  (Kokoro g2p) — `sudo apt install espeak-ng`

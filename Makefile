@@ -120,9 +120,9 @@ robot-restart: ## Stop the running app (one-app rule) and start soulmount via RE
 
 # ── Voice (Phase 2, companion host = laptop) ──────────────────────────────────
 .PHONY: voice-setup voice-run
-voice-setup: ## Create a py3.12 venv + install speech-to-speech (one-time; multi-GB)
+voice-setup: ## Create a py3.12 venv + install the voice cascade + kokoro model (one-time)
 	@bash scripts/voice_server.sh setup
-voice-run: ## Launch the local voice server (Kokoro voice af_bella) pointed at the brain
+voice-run: ## Serve the voice-service on :8200 (STT->brain->kokoro af_heart), robot streams to it
 	@bash scripts/voice_server.sh run
 
 # ── Appliance (Phase 4) ──────────────────────────────────────────────────────
