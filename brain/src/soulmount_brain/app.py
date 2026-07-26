@@ -151,12 +151,22 @@ async def chat_completions(request: Request):
 
     body.setdefault("model", c.settings.brain_model)
     # Inject identity as system prompt when the caller sends none (§7.1).
+    voice_mode = bool(body.pop("voice", False))  # brain-internal hint; never forwarded upstream
     messages = body.get("messages") or []
     injected_letter: str | None = None
     if not any((m or {}).get("role") == "system" for m in messages):
         result = await _compile_identity(c)
         injected_letter = result.included_letter
-        body["messages"] = [{"role": "system", "content": result.text}, *messages]
+        sys_text = result.text
+        if voice_mode:
+            # Spoken turns must be short; motion cues stay (the body acts them out, TTS strips them).
+            sys_text += (
+                "\n\n## Right now: speaking aloud\n"
+                "You're talking out loud, not typing. Keep replies to one or two short, natural "
+                "spoken sentences. Motion cues in *asterisks* are welcome (the body acts them out), "
+                "but keep the words brief."
+            )
+        body["messages"] = [{"role": "system", "content": sys_text}, *messages]
 
     # Pre-flight bound: cap max_tokens so a single turn's completion can't cost more
     # than the remaining budget (keeps "hard means hard" close to true even when the

@@ -148,3 +148,16 @@ def test_max_tokens_capped_at_ceiling_when_caller_sends_none(client):
     client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}]}, headers=AUTH)
     sent = json.loads(route.calls[0].request.content)
     assert sent["max_tokens"] == 8192
+
+
+@respx.mock
+def test_voice_flag_adds_brevity_and_is_not_forwarded(client):
+    # A `voice: true` request nudges the injected identity toward short spoken replies,
+    # and the brain-internal flag is stripped before the upstream call.
+    route = respx.post(URL).mock(return_value=httpx.Response(200, json=_completion()))
+    client.post("/v1/chat/completions",
+                json={"messages": [{"role": "user", "content": "hi"}], "voice": True}, headers=AUTH)
+    sent = json.loads(route.calls[0].request.content)
+    assert "voice" not in sent  # brain-internal, never forwarded upstream
+    assert sent["messages"][0]["role"] == "system"
+    assert "speaking aloud" in sent["messages"][0]["content"].lower()
