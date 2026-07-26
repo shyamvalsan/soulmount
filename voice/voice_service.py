@@ -67,6 +67,19 @@ def health() -> dict:
     return {"status": "ok", "voice": VOICE, "device_sr": DEVICE_SR}
 
 
+@app.post("/say")
+async def say(payload: dict) -> dict:
+    """Text -> speech (no STT/brain). For the wake greeting and directed lines. Returns the
+    motion cues found in the text + 16 kHz reply audio."""
+    text = (payload or {}).get("text", "").strip()
+    if not text:
+        return {"cues": [], "audio_b64": ""}
+    return {
+        "cues": extract_cues(text),
+        "audio_b64": base64.b64encode(synth_16k_wav(clean_for_tts(text))).decode(),
+    }
+
+
 @app.post("/voice")
 async def voice(request: Request) -> dict:
     raw = await request.body()  # WAV bytes, ideally 16 kHz mono

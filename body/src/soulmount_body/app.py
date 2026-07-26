@@ -60,6 +60,7 @@ class SoulmountApp(_Base):
     def run(self, reachy_mini=None, stop_event: threading.Event | None = None) -> None:
         if stop_event is not None:
             self.stop_event = stop_event
+        self.reachy_mini = reachy_mini  # SDK instance for audio (voice backend); None off-robot
         asyncio.run(self._arun())
 
     def stop(self) -> None:
@@ -79,7 +80,7 @@ class SoulmountApp(_Base):
         cfg = load_config()
         robot = RobotControl(cfg.daemon_url)
         brain = BrainConnection(cfg.brain_base_url, cfg.auth_header)
-        voice = make_voice_backend(cfg.voice_backend, cfg)
+        voice = make_voice_backend(cfg.voice_backend, cfg, reachy_mini=getattr(self, "reachy_mini", None))
         house = HouseRules()  # replaced once the brain answers
         try:
             house = await self._startup_ritual(cfg, robot, brain, voice)

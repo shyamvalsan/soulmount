@@ -50,6 +50,7 @@ class BodyConfig:
     retry_interval_s: float = 5.0       # brain-down droop/retry cadence
     health_poll_s: float = 10.0         # how often to re-check brain sleep/health
     greeting: str = "Hi. I'm awake."    # startup one-liner (overridden by profile in prod)
+    voice_service_url: str = ""         # companion-host cascade (STT/TTS); defaults to brain host :8200
 
     @property
     def brain_base_url(self) -> str:
@@ -67,8 +68,9 @@ def load_config() -> BodyConfig:
         # process env wins, then the .env file, then the default.
         return os.environ.get(name) or env_file.get(name) or default
 
+    brain_host = get("BRAIN_HOST", "127.0.0.1")
     return BodyConfig(
-        brain_host=get("BRAIN_HOST", "127.0.0.1"),
+        brain_host=brain_host,
         brain_port=int(get("BRAIN_PORT", "8100")),
         brain_api_key=get("BRAIN_API_KEY", ""),
         daemon_url=get("DAEMON_URL", "http://127.0.0.1:8000"),
@@ -76,4 +78,6 @@ def load_config() -> BodyConfig:
         retry_interval_s=float(get("BODY_RETRY_INTERVAL_S", "5")),
         health_poll_s=float(get("BODY_HEALTH_POLL_S", "10")),
         greeting=get("BODY_GREETING", "Hi. I'm awake."),
+        # cascade runs on the companion host (the brain host for now) on :8200.
+        voice_service_url=get("VOICE_SERVICE_URL", "") or f"http://{brain_host}:8200",
     )
