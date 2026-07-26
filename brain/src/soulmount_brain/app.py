@@ -165,6 +165,9 @@ async def chat_completions(request: Request):
     if price > 0:
         remaining = max(0.0, min(decision.remaining_today_usd, decision.remaining_month_usd))
         affordable = max(GOODNIGHT_MAX_TOKENS, int(remaining / price))  # always allow a short turn
+        # Ceiling so the budget-derived bound can't exceed the model's context window
+        # (a caller sending no max_tokens would otherwise request ~budget/price tokens -> 502).
+        affordable = min(affordable, c.settings.max_output_tokens)
         existing = body.get("max_tokens")
         body["max_tokens"] = min(existing, affordable) if existing else affordable
 

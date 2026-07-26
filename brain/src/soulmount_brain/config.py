@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     budget_monthly_usd: float = 30.0
     budget_tz: str = ""
     budget_goodnight_reserve_usd: float = 0.05
+    # Ceiling on any single completions turn. The budget-derived bound (remaining/price)
+    # can exceed the model's context window; cap it to a reasonably large value so a turn
+    # never overflows context (fixes a 502 when a caller sends no max_tokens). Override in .env.
+    max_output_tokens: int = 8192
     # SPEC GAP (resolved): budget caps are in USD, me-time/studio caps in EUR, with
     # no conversion rate given. OpenRouter reports cost in USD, so we convert the
     # EUR caps to USD via this documented rate. See FACTS.md §7. Override in .env.

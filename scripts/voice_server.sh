@@ -26,7 +26,7 @@ BRAIN_URL="http://127.0.0.1:${BRAIN_PORT}/v1"   # s2s and brain are both on the 
 S2S_STT="${VOICE_STT:-faster-whisper}"          # light + CPU-friendly (RAM-constrained laptop);
                                                 # NB confirm the model-size flag (default may be large) in --help
 S2S_TTS="kokoro"                                # CPU-friendly, many EN voices
-S2S_VOICE="${VOICE_KOKORO:-af_bella}"           # owner pick (2026-07-23)
+S2S_VOICE="${VOICE_KOKORO:-af_heart}"           # owner pick (2026-07-23)
 
 usage() { echo "usage: voice_server.sh {setup|run}"; exit 2; }
 

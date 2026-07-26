@@ -11,6 +11,8 @@ soulmount-data/
 
 # Python
 .venv/
+.venv-voice/
+.venv-voice-help.txt
 venv/
 __pycache__/
 *.py[cod]

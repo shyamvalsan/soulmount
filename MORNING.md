@@ -114,6 +114,20 @@ set; leakcheck tree+history clean; robot persona verified live. Details are giti
       **2a** audition voices with the stock conversation app first; **2b** then port the realtime-WS
       client into our app's voice backend (keep the robot's soul + rituals). Voice pipeline runs on a
       COMPANION HOST, not the robot's Pi.
+- [x] **VOICE PoC WORKING (2026-07-25, laptop):** the HF `speech-to-speech` framework does NOT
+      install on modern Python (its qwen-tts -> librosa -> numba 0.53.1 chain caps at Python <3.10),
+      so the working cascade is a MINIMAL one: faster-whisper (STT) + kokoro-onnx (TTS) + the brain.
+      Voice pinned to **`af_heart`** (others ruled out). Full mic -> STT -> brain -> af_heart -> speaker
+      loop runs on the laptop CPU (~10-12s/turn, bound by brain-reply length). Attic (GTX 1650, 4GB)
+      confirmed able to host it. Brain `max_output_tokens` ceiling (8192) added — the budget guard was
+      setting ~833k max_tokens (budget/price) and 502ing when a caller sent no max_tokens.
+- [x] **VOICE DIRECTION (2026-07-25):** owner wants FULLY LOCAL / on-prem audio with the
+      brain as the mind (Option 1) — NOT OpenAI Realtime (that bypasses the brain and streams
+      household audio out). Laptop is TEST-ONLY (CPU, lag acceptable for dev). The always-on
+      host (attic PC) is the intended PRODUCTION voice host, PENDING a capability check
+      (GPU model + VRAM, RAM, CPU). OPEN sub-question that sets the GPU bar: is the LLM ALSO
+      local (point the brain's upstream base_url at a local OpenAI-compatible server) or does
+      it stay grok-via-OpenRouter (text-only egress, audio still never leaves)?
 - [x] **RESOLVED (morning research, FACTS §3):** the brain needs NO change. Use
       `--llm_backend chat-completions` — it consumes our `/v1/chat/completions` as-is; no
       `/v1/responses` shim. Verified our tools/extra_body passthrough works.

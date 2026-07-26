@@ -137,3 +137,14 @@ def test_goodnight_forces_short_turn(make_client):
         c.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}], "max_tokens": 4000}, headers=AUTH)
     sent = json.loads(route.calls[0].request.content)
     assert sent["max_tokens"] == 256  # capped to the goodnight ceiling
+
+
+@respx.mock
+def test_max_tokens_capped_at_ceiling_when_caller_sends_none(client):
+    # The budget-derived bound (remaining/price) can exceed the model's context window;
+    # the max_output_tokens ceiling (default 8192) clamps it so a caller that sends no
+    # max_tokens (e.g. the voice server) doesn't request ~budget/price tokens and 502.
+    route = respx.post(URL).mock(return_value=httpx.Response(200, json=_completion()))
+    client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}]}, headers=AUTH)
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["max_tokens"] == 8192
