@@ -36,8 +36,14 @@ class _RedactingFilter(logging.Filter):
     _RE = re.compile(r"(Bearer\s+[A-Za-z0-9._-]{16,}|[0-9a-fA-F]{48,}|sk-[A-Za-z0-9-]{20,})")
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            record.msg = self._RE.sub("***REDACTED***", record.msg)
+        # Format msg % args first, then redact — so secrets in non-string args
+        # (e.g. an httpx exception carrying a bearer/URL) are caught too.
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        record.msg = self._RE.sub("***REDACTED***", msg)
+        record.args = None
         return True
 
 

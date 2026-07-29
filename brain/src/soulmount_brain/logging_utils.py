@@ -27,12 +27,15 @@ def redact(text: str) -> str:
 
 class _RedactingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            record.msg = redact(record.msg)
-        if record.args:
-            record.args = tuple(
-                redact(a) if isinstance(a, str) else a for a in record.args
-            )
+        # Format msg % args FIRST, then redact the result — so secrets carried by
+        # NON-string args (e.g. an httpx exception whose str holds the bot-token URL)
+        # are caught too, not just string args.
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        record.msg = redact(msg)
+        record.args = None
         return True
 
 
