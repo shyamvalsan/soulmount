@@ -103,6 +103,7 @@ class CascadeVoiceBackend(VoiceBackend):
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._play_lock = threading.Lock()
+        self._wake_key: str | None = None
         self._http = httpx.Client(timeout=httpx.Timeout(90.0, connect=5.0))
 
     async def start(self, identity: str | None = None) -> None:
@@ -150,10 +151,67 @@ class CascadeVoiceBackend(VoiceBackend):
         except Exception as e:
             log.warning("voice: say failed: %s", e)
 
+    def _load_oww(self):
+        """Load the openWakeWord detector (on the Pi). Returns None if unavailable.
+        cfg.wake_word is a pretrained name (e.g. 'hey_jarvis') or a custom .onnx path."""
+        try:
+            import os
+            import openwakeword
+            from openwakeword.model import Model
+            ww = self.cfg.wake_word
+            if ww.endswith(".onnx") or "/" in ww:
+                path = ww
+            else:  # resolve a pretrained name to its bundled .onnx path
+                path = next(p for p in openwakeword.get_pretrained_model_paths()
+                            if ww in os.path.basename(p))
+            model = Model(wakeword_model_paths=[path])
+            self._wake_key = next(iter(model.models.keys()))
+            log.info("wake word active: '%s' (threshold %.2f)", self._wake_key, self.cfg.wake_threshold)
+            return model
+        except Exception as e:
+            log.warning("wake word unavailable (%s) — falling back to open listening", e)
+            return None
+
+    def _wait_for_wake(self, oww) -> bool:
+        """Block, feeding mic frames to the detector, until the wake word fires. Nothing is
+        sent off-device until this returns True — background chatter never leaves the house."""
+        try:
+            oww.reset()
+        except Exception:
+            pass
+        thr = self.cfg.wake_threshold
+        while not self._stop.is_set() and self._active.is_set():
+            try:
+                s = self.rm.media.get_audio_sample()
+            except Exception:
+                return False
+            if s is None:
+                time.sleep(0.01)
+                continue
+            x = np.asarray(s, dtype=np.float32)
+            if x.ndim > 1:
+                x = x.mean(axis=1)
+            if x.size == 0:
+                continue
+            pcm16 = (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+            try:
+                scores = oww.predict(pcm16)
+            except Exception:
+                continue
+            if scores.get(self._wake_key, 0.0) >= thr:
+                log.info("wake word '%s' detected", self._wake_key)
+                return True
+        return False
+
     def _loop(self) -> None:
+        oww = self._load_oww()
         while not self._stop.is_set():
             if not self._active.is_set():
                 time.sleep(0.1)
+                continue
+            # Wake gate: capture a turn only after the wake word (ignores background talk).
+            # If the detector didn't load, fall back to open listening so the app still works.
+            if oww is not None and not self._wait_for_wake(oww):
                 continue
             utt = self._collect()
             if utt is None or self._stop.is_set() or not self._active.is_set():

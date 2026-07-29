@@ -51,6 +51,8 @@ class BodyConfig:
     health_poll_s: float = 10.0         # how often to re-check brain sleep/health
     greeting: str = "Hi. I'm awake."    # startup one-liner (overridden by profile in prod)
     voice_service_url: str = ""         # companion-host cascade (STT/TTS); defaults to brain host :8200
+    wake_word: str = "hey_jarvis"       # openWakeWord model name or .onnx path (Phase B: custom word)
+    wake_threshold: float = 0.5         # detection score gate
 
     @property
     def brain_base_url(self) -> str:
@@ -80,4 +82,6 @@ def load_config() -> BodyConfig:
         greeting=get("BODY_GREETING", "Hi. I'm awake."),
         # cascade runs on the companion host (the brain host for now) on :8200.
         voice_service_url=get("VOICE_SERVICE_URL", "") or f"http://{brain_host}:8200",
+        wake_word=get("WAKE_WORD", "hey_jarvis"),
+        wake_threshold=float(get("WAKE_THRESHOLD", "0.5")),
     )

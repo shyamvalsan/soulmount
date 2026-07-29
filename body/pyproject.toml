@@ -17,6 +17,7 @@ dependencies = [
 # 1.10 (that would upgrade the SDK out of step with the 1.6.3 daemon). See FACTS §2.1.
 robot = [
     "reachy-mini>=1.6",
+    "openwakeword>=0.4",   # on-Pi wake-word gate; ONNX inference, no cloud
 ]
 dev = [
     "pytest>=8.2",
